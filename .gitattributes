@@ -1,0 +1,9 @@
+# Normalize line endings (teammates on Windows/WSL2)
+* text=auto eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+
+*.pdf binary
+*.png binary
+*.jpg binary
+*.ico binary

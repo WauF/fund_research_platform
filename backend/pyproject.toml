@@ -1,0 +1,35 @@
+[project]
+name = "fund-research-backend"
+version = "0.1.0"
+description = "Fund research & exposure platform — extraction, exposure engine and API"
+readme = "../README.md"
+requires-python = ">=3.12,<3.13"
+# Runtime dependencies are added by each package owner in their own PR
+# (e.g. `uv add pydantic`, `uv add fastapi`).
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1",
+    "ruff>=0.17",
+]
+
+[tool.uv]
+# Not a distributable package: modules are imported from backend/ directly
+# (e.g. `from schemas.holding import Holding`).
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "storage", "schemas", "extraction", "exposure"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-ra"

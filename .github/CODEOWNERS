@@ -1,0 +1,23 @@
+# Each path lists its owner + their assigned reviewer (see docs/plans/sprint1.md §2).
+# With "Require review from Code Owners" on, the author's PR needs the *other* owner's approval.
+# TODO: replace placeholders with real GitHub usernames.
+
+# Default: anyone on the team
+*                       @AHMET_GH @AKIF_GH @YUSUF_GH
+
+# Package A — Akif (reviewer: Yusuf Eren)
+/backend/extraction/    @AKIF_GH @YUSUF_GH
+
+# Shared schema — needs all three (3 approvals: set on the PR, CODEOWNERS can't count)
+/backend/schemas/       @AKIF_GH @YUSUF_GH @AHMET_GH
+
+# Package B — Yusuf Eren (reviewer: Ahmet Emre)
+/backend/exposure/      @YUSUF_GH @AHMET_GH
+/backend/tests/fixtures/ @YUSUF_GH @AHMET_GH
+
+# Package C — Ahmet Emre (reviewer: Akif)
+/backend/app/           @AHMET_GH @AKIF_GH
+/backend/storage/       @AHMET_GH @AKIF_GH
+/.github/               @AHMET_GH @AKIF_GH
+/docker-compose.yml     @AHMET_GH @AKIF_GH
+/frontend/              @AHMET_GH @AKIF_GH
