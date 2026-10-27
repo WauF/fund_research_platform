@@ -17,6 +17,7 @@ backend/            Python 3.12 (uv)
   extraction/       PDF → Holding çıkarımı (LLM)           — Paket A
   exposure/         Look-through / risk motoru             — Paket B
   tests/            pytest; fixtures/ ve recorded/ (kayıtlı LLM çıktıları)
+  evaluations/      Gerçek LLM / piyasa verisi değerlendirmeleri (CI'da çalışmaz)
 frontend/           Next.js (TypeScript, Tailwind, App Router)
 docs/decisions/     Karar notları
 docs/plans/         Sprint planları
@@ -52,6 +53,8 @@ Ortam değişkenleri: `cp .env.example .env`.
 - Bir görev dört koşulla biter: kod yazıldı, testi var, bir arkadaş onayladı, CI yeşil.
 - `backend/schemas/` değişiklikleri 3 onay ister.
 - CI gerçek LLM API'sini asla çağırmaz; testler `backend/tests/recorded/` ile çalışır.
+  Testlerde internet erişimi kapalıdır (yalnızca localhost). Gerçek LLM / piyasa verisi çağrıları
+  `backend/evaluations/` altına yazılır ve elle tetiklenen *Evaluation* workflow'u ile çalışır.
 - PDF'ler ve `.env` git'e girmez.
 - PR'lar küçük (ideal < 300 satır); inceleme 24 saat içinde.
 - Önemli kararlar `docs/decisions/` altına yazılır.

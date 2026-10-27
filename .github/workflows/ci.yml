@@ -1,0 +1,111 @@
+# Runs on every PR and on pushes to main. A task is only done when this is green
+# (see docs/plans/sprint1.md §2). Required status checks on `main`: backend, frontend, hygiene.
+#
+# CI never calls a real LLM or market-data API: no secrets are passed to any job, pytest-socket
+# blocks internet access in tests (backend/pyproject.toml), and tests use backend/tests/recorded/
+# instead. Live runs go through the manual evaluation.yml workflow.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a PR cancels the previous run for that PR; runs on main always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  backend:
+    name: backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      # Belt and braces: make sure nothing can reach a real LLM even if code reads these.
+      LLM_API_KEY: ""
+      LLM_MODEL: ""
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: backend
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      # --locked fails if pyproject.toml and uv.lock disagree (someone forgot `uv lock`).
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+      - name: Pytest
+        run: uv run pytest
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+  # Repo hygiene from .pre-commit-config.yaml (no PDFs, no .env, no private keys, large files,
+  # whitespace...). Catches PRs from anyone who skipped `pre-commit install`. Ruff hooks are
+  # skipped here because the backend job already runs ruff at the locked version.
+  hygiene:
+    name: hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      SKIP: ruff-check,ruff-format
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: .pre-commit-config.yaml
+          ignore-nothing-to-cache: true
+
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Run pre-commit
+        run: uvx pre-commit run --all-files --show-diff-on-failure --color=always

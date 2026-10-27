@@ -1,13 +1,13 @@
 # CSE 496 Fon Maruziyet Platformu - 1. Hafta Görev Planı
 
-**Tarih:** 25 Ekim – 1 Kasım 2026  
-**Ekip:** Mehmet Akif Çavuş, Ahmet Emre Kurt, Yusuf Eren Nalbant  
-**Danışman:** Fatih Özhamaratlı  
+**Tarih:** 25 Ekim – 1 Kasım 2026
+**Ekip:** Mehmet Akif Çavuş, Ahmet Emre Kurt, Yusuf Eren Nalbant
+**Danışman:** Fatih Özhamaratlı
 
 **Güncel Paket Dağılımı:**
 * **Paket A:** Mehmet Akif Çavuş
 * **Paket B:** Yusuf Eren Nalbant
-* **Paket C:** Ahmet Emre Kurt  
+* **Paket C:** Ahmet Emre Kurt
 
 ---
 

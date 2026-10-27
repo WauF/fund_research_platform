@@ -1,0 +1,83 @@
+# Live evaluations: the ONLY workflow allowed to call a real LLM or market-data API.
+# Manual trigger only (Actions → Evaluation → Run workflow), so routine CI stays repeatable and
+# free. Runs backend/evaluations/ — see backend/evaluations/README.md.
+#
+# Setup (once, in repo Settings → Environments → "evaluation"):
+#   secrets:   LLM_API_KEY, MARKET_DATA_API_KEY (if the provider needs one)
+#   variables: LLM_MODEL
+#   optional:  "Required reviewers" so every run (= real money) needs a teammate's approval.
+name: Evaluation
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Which evaluations to run
+        type: choice
+        options: [extraction, market_data, all]
+        default: extraction
+      model:
+        description: LLM model override (empty = LLM_MODEL variable of the evaluation environment)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+# One live run at a time; a second run waits instead of cancelling a run that already spent money.
+concurrency:
+  group: evaluation
+  cancel-in-progress: false
+
+jobs:
+  evaluate:
+    name: evaluate (${{ inputs.suite }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: evaluation
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          working-directory: backend
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      # --force-enable-socket lifts the routine-test network block (pyproject.toml addopts).
+      # Exit code 5 = no evaluations collected yet; not a failure while the suite is empty.
+      - name: Run evaluations
+        env:
+          SUITE: ${{ inputs.suite }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_MODEL: ${{ inputs.model || vars.LLM_MODEL }}
+          MARKET_DATA_API_KEY: ${{ secrets.MARKET_DATA_API_KEY }}
+        run: |
+          mkdir -p evaluations/results
+          marker=()
+          if [ "$SUITE" != "all" ]; then marker=(-m "$SUITE"); fi
+          set +e
+          uv run pytest evaluations --force-enable-socket "${marker[@]}" \
+            --junitxml=evaluations/results/junit.xml
+          code=$?
+          set -e
+          if [ "$code" -eq 5 ]; then
+            echo "::notice::No evaluations collected for suite '$SUITE' yet."
+            exit 0
+          fi
+          exit "$code"
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: evaluation-${{ inputs.suite }}-${{ github.run_number }}
+          path: backend/evaluations/results/
+          if-no-files-found: ignore
+          retention-days: 90

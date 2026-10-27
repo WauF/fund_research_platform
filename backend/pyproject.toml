@@ -11,6 +11,7 @@ dependencies = []
 [dependency-groups]
 dev = [
     "pytest>=9.1",
+    "pytest-socket>=0.8.1",
     "ruff>=0.17",
 ]
 
@@ -30,6 +31,14 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 known-first-party = ["app", "storage", "schemas", "extraction", "exposure"]
 
 [tool.pytest.ini_options]
+# Routine tests only. Live LLM / market-data runs live in evaluations/ and are never collected here.
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-ra"
+# pytest-socket: routine tests may only connect to localhost (local Postgres/MinIO, asyncio
+# internals). Any call to the internet — an LLM API, KAP, a market-data feed — fails the test.
+# Use tests/recorded/ and tests/fixtures/ instead.
+addopts = "-ra --allow-hosts=127.0.0.1,::1,localhost --allow-unix-socket"
+markers = [
+    "extraction: live LLM extraction evaluation (evaluations/ only)",
+    "market_data: live market/return data evaluation (evaluations/ only)",
+]

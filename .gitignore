@@ -30,3 +30,6 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# --- Evaluation outputs (uploaded as CI artifacts, not committed) ---
+backend/evaluations/results/
