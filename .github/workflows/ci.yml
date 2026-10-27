@@ -1,5 +1,6 @@
 # Runs on every PR and on pushes to main. A task is only done when this is green
-# (see docs/plans/sprint1.md §2). Required status checks on `main`: backend, frontend, hygiene.
+# (see docs/plans/sprint1.md §2). Required status checks on `main`: backend, frontend, docker,
+# hygiene.
 #
 # CI never calls a real LLM or market-data API: no secrets are passed to any job, pytest-socket
 # blocks internet access in tests (backend/pyproject.toml), and tests use backend/tests/recorded/
@@ -83,6 +84,38 @@ jobs:
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: 1
+
+  # Builds both images and boots the whole stack exactly as `docker compose up` does locally,
+  # then smoke-tests it. Catches broken Dockerfiles, compose wiring and startup crashes.
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # Dummy credentials only; nothing here is reachable outside the runner.
+      - name: Create .env
+        run: cp .env.example .env
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start stack
+        run: docker compose up -d --wait --wait-timeout 180
+
+      - name: Smoke test
+        run: |
+          curl -fsS http://localhost:8000/health
+          curl -fsS -o /dev/null http://localhost:3000
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose ps -a && docker compose logs
+
+      - name: Stop stack
+        if: always()
+        run: docker compose down -v
 
   # Repo hygiene from .pre-commit-config.yaml (no PDFs, no .env, no private keys, large files,
   # whitespace...). Catches PRs from anyone who skipped `pre-commit install`. Ruff hooks are

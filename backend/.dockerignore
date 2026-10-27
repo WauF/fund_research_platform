@@ -1,0 +1,14 @@
+# Keep the image to runtime code only. Tests and live evaluations never ship.
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+tests/
+evaluations/
+.env
+.env.*
+*.pdf
+Dockerfile
+.dockerignore

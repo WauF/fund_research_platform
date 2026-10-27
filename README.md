@@ -28,6 +28,20 @@ data/corpus.csv     Rapor listesi (KAP linki + SHA-256) — PDF'ler git'e girmez
 
 Gereksinimler: Python 3.12, [uv](https://docs.astral.sh/uv/), Node.js 20+, Docker.
 
+### Tüm sistem (Docker)
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+- Web: http://localhost:3000 · API: http://localhost:8000/docs · MinIO konsolu: http://localhost:9001
+- Durdurmak: `docker compose down` (verileri de silmek için `docker compose down -v`)
+- Postgres ve MinIO'yu Docker'da çalıştırıp backend'i lokalde geliştirmek için:
+  `docker compose up -d postgres minio minio-init`, sonra `cd backend && uv run uvicorn app.main:app --reload`
+
+### Ayrı ayrı geliştirme
+
 ```bash
 # Backend
 cd backend
