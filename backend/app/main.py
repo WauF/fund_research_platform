@@ -2,7 +2,10 @@
 
 from fastapi import FastAPI
 
+from app import documents
+
 app = FastAPI(title="Fund Research & Exposure Platform")
+app.include_router(documents.router)
 
 
 @app.get("/health")

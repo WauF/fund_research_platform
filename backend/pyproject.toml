@@ -7,13 +7,20 @@ requires-python = ">=3.12,<3.13"
 # Runtime dependencies are added by each package owner in their own PR
 # (e.g. `uv add pydantic`, `uv add fastapi`).
 dependencies = [
+    "alembic>=1.20.1",
+    "boto3>=1.43.120",
     "fastapi>=0.162.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.2",
+    "python-multipart>=0.0.32",
+    "sqlalchemy>=2.1.6",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
     "httpx2>=2.16.0",
+    "moto[s3]>=5.2.5",
     "pytest>=9.1",
     "pytest-socket>=0.8.1",
     "ruff>=0.17",
@@ -38,7 +45,7 @@ known-first-party = ["app", "storage", "schemas", "extraction", "exposure"]
 # Routine tests only. Live LLM / market-data runs live in evaluations/ and are never collected here.
 testpaths = ["tests"]
 pythonpath = ["."]
-# pytest-socket: routine tests may only connect to localhost (local Postgres/MinIO, asyncio
+# pytest-socket: routine tests may only connect to localhost (local Postgres/S3, asyncio
 # internals). Any call to the internet — an LLM API, KAP, a market-data feed — fails the test.
 # Use tests/recorded/ and tests/fixtures/ instead.
 addopts = "-ra --allow-hosts=127.0.0.1,::1,localhost --allow-unix-socket"
