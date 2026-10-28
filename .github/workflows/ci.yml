@@ -126,6 +126,14 @@ jobs:
               "select count(*) from documents where sha256 = '"'"'$SHA'"'"'"')
           [ "$rows" = 1 ]
 
+      # Every downgrade() must work on real Postgres too (SQLite misses e.g. leftover enum types).
+      # Rules: .claude/skills/db-migrations/SKILL.md
+      - name: Migration round trip
+        run: |
+          docker compose run --rm migrate alembic downgrade base
+          docker compose run --rm migrate alembic upgrade head
+          docker compose run --rm migrate alembic current | grep -q '(head)'
+
       - name: Logs on failure
         if: failure()
         run: docker compose ps -a && docker compose logs

@@ -77,3 +77,6 @@ Ortam değişkenleri: `cp .env.example .env`.
 - PDF'ler ve `.env` git'e girmez.
 - PR'lar küçük (ideal < 300 satır); inceleme 24 saat içinde.
 - Önemli kararlar `docs/decisions/` altına yazılır.
+- Veritabanı şeması yalnızca Alembic migration ile değişir; her migration geri alınabilir olmalı.
+  Kurallar ve rollback prosedürü: [`.claude/skills/db-migrations/SKILL.md`](.claude/skills/db-migrations/SKILL.md)
+  (Claude Code bu dosyayı migration işlerinde otomatik okur).
