@@ -1,1 +1,1 @@
-"""Package C — MinIO object storage + DB repositories (owner: Ahmet Emre)."""
+"""Package C — S3 object storage (SeaweedFS) + DB repositories (owner: Ahmet Emre)."""

@@ -109,6 +109,23 @@ jobs:
           curl -fsS http://localhost:8000/health
           curl -fsS -o /dev/null http://localhost:3000
 
+      # Upload the same PDF twice through api -> Postgres + SeaweedFS: one record, same id.
+      - name: Upload smoke test
+        run: |
+          printf '%%PDF-1.4\n%% ci smoke\n%%%%EOF\n' > "$RUNNER_TEMP/smoke.pdf"
+          upload() {
+            curl -sS -o "$RUNNER_TEMP/$1.json" -w '%{http_code}' \
+              -F "file=@$RUNNER_TEMP/smoke.pdf;type=application/pdf" http://localhost:8000/documents
+          }
+          [ "$(upload first)" = 201 ]
+          [ "$(upload second)" = 200 ]
+          [ "$(jq .id "$RUNNER_TEMP/first.json")" = "$(jq .id "$RUNNER_TEMP/second.json")" ]
+          sha=$(jq -r .sha256 "$RUNNER_TEMP/first.json")
+          rows=$(docker compose exec -T -e SHA="$sha" postgres sh -c \
+            'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc \
+              "select count(*) from documents where sha256 = '"'"'$SHA'"'"'"')
+          [ "$rows" = 1 ]
+
       - name: Logs on failure
         if: failure()
         run: docker compose ps -a && docker compose logs

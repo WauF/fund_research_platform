@@ -12,7 +12,8 @@ fon-içinde-fon yapılarında **look-through** ile gerçek varlık maruziyetini 
 ```
 backend/            Python 3.12 (uv)
   app/              FastAPI uygulaması                    — Paket C
-  storage/          MinIO + DB repository katmanı          — Paket C
+  storage/          SeaweedFS (S3) + DB repository katmanı — Paket C
+  migrations/       Alembic veritabanı migration'ları      — Paket C
   schemas/          Ortak Pydantic şemaları (3 onay)       — Paket A
   extraction/       PDF → Holding çıkarımı (LLM)           — Paket A
   exposure/         Look-through / risk motoru             — Paket B
@@ -35,10 +36,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
-- Web: http://localhost:3000 · API: http://localhost:8000/docs · MinIO konsolu: http://localhost:9001
+- Web: http://localhost:3000 · API: http://localhost:8000/docs · SeaweedFS admin: http://localhost:23646
+  (kullanıcı/şifre: `.env`'deki `S3_ACCESS_KEY` / `S3_SECRET_KEY`) · S3 API: http://localhost:8333
 - Durdurmak: `docker compose down` (verileri de silmek için `docker compose down -v`)
-- Postgres ve MinIO'yu Docker'da çalıştırıp backend'i lokalde geliştirmek için:
-  `docker compose up -d postgres minio minio-init`, sonra `cd backend && uv run uvicorn app.main:app --reload`
+- Postgres ve SeaweedFS'i Docker'da çalıştırıp backend'i lokalde geliştirmek için:
+  `docker compose up -d postgres seaweedfs`, sonra
+  `cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --reload`
+- PDF yükleme: `curl -F "file=@rapor.pdf" http://localhost:8000/documents` — ilk yüklemede `201`,
+  aynı içerik tekrar gelirse `200` ve mevcut kayıt döner (kimlik: dosyanın SHA-256'sı).
 
 ### Ayrı ayrı geliştirme
 
