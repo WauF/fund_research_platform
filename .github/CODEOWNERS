@@ -3,21 +3,21 @@
 # TODO: replace placeholders with real GitHub usernames.
 
 # Default: anyone on the team
-*                       @AHMET_GH @AKIF_GH @YUSUF_GH
+*                       @WauF @Pikseel @Nlbnt03
 
 # Package A — Akif (reviewer: Yusuf Eren)
-/backend/extraction/    @AKIF_GH @YUSUF_GH
+/backend/extraction/    @Pikseel @Nlbnt03
 
 # Shared schema — needs all three (3 approvals: set on the PR, CODEOWNERS can't count)
-/backend/schemas/       @AKIF_GH @YUSUF_GH @AHMET_GH
+/backend/schemas/       @Pikseel @Nlbnt03 @WauF
 
 # Package B — Yusuf Eren (reviewer: Ahmet Emre)
-/backend/exposure/      @YUSUF_GH @AHMET_GH
-/backend/tests/fixtures/ @YUSUF_GH @AHMET_GH
+/backend/exposure/      @Nlbnt03 @WauF
+/backend/tests/fixtures/ @Nlbnt03 @WauF
 
 # Package C — Ahmet Emre (reviewer: Akif)
-/backend/app/           @AHMET_GH @AKIF_GH
-/backend/storage/       @AHMET_GH @AKIF_GH
-/.github/               @AHMET_GH @AKIF_GH
-/docker-compose.yml     @AHMET_GH @AKIF_GH
-/frontend/              @AHMET_GH @AKIF_GH
+/backend/app/           @WauF @Pikseel
+/backend/storage/       @WauF @Pikseel
+/.github/               @WauF @Pikseel
+/docker-compose.yml     @WauF @Pikseel
+/frontend/              @WauF @Pikseel
