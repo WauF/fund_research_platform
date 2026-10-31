@@ -1,8 +1,8 @@
-# 0007 — Kaynak PDF'ler repoda tutulsun mu?
+# 0007 — Kaynak PDF'ler repoda (data/raw/)
 
 - **Tarih:** 2026-10-31
-- **Durum:** önerildi (ekip onayı bekliyor; şu an geçerli kural: PDF'ler git'e girmez)
-- **Karar verenler:** —
+- **Durum:** kabul edildi
+- **Karar verenler:** Mehmet Akif Çavuş, Ahmet Emre Kurt
 
 ## Bağlam
 Repo kuralı PDF'leri dışarıda tutuyor (`.gitignore`, pre-commit `no-pdfs` kancası,
@@ -18,7 +18,18 @@ Repo gizli.
 - **C — PDF'ler Git LFS'te.** Artı: clone hızlı, sınırlar korunur. Eksi: LFS kotası, CI'da ek ayar.
 - **D — PDF'ler paylaşılan bir klasörde** (Drive) + `corpus.csv`'deki SHA-256 ile doğrulama.
 
-## Öneri
-B veya C (Akif). Hangisi seçilirse seçilsin, bir PDF'in üzerine yazılmaz; revizyon yeni dosya
+## Karar
+**B.** PDF'ler `data/raw/<KOD>/` altında git'te tutulur. 21 MB için LFS gereksiz; repo 100 MB'a
+yaklaşırsa C'ye (LFS) geçilir. MediaFire gibi herkese açık bir paylaşım düşünüldü, link herkese
+açık olduğu ve kalıcı olmadığı için seçilmedi.
+
+Kurallar:
+- PDF yalnızca `data/raw/` altında olabilir (`.gitignore` ve pre-commit `no-pdfs` bunu zorlar).
+- Bir PDF'in üzerine yazılmaz; revizyon yeni dosya olarak eklenir. `data/corpus.csv` her dosyanın
+  SHA-256'sını tutar.
+- Repo gizli kalır. KAP kullanım koşulları doğrulanınca (`docs/notes/kap-tefas-kullanim-kosullari.md`)
+  saklamayı yasaklayan bir madde çıkarsa bu karar yeniden açılır.
+
+Eski öneri metni: Hangisi seçilirse seçilsin, bir PDF'in üzerine yazılmaz; revizyon yeni dosya
 olarak eklenir (spec: eski rapor girdileri korunur). Değişiklik `.gitignore`,
 `.pre-commit-config.yaml` ve README'ye dokunduğu için Paket C sahibinin onayı gerekir.

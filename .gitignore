@@ -3,9 +3,9 @@
 .env.*
 !.env.example
 
-# --- Raw data: PDFs never enter git (only data/corpus.csv: link + SHA-256) ---
+# --- Raw data: KAP PDFs live only in data/raw/ (docs/decisions/0007); no PDFs anywhere else ---
 *.pdf
-data/raw/
+!data/raw/**/*.pdf
 
 # --- Python ---
 __pycache__/

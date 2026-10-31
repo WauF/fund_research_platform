@@ -9,7 +9,7 @@
 - [ ] Branch adı `feat/...` / `fix/...`, commit'ler `feat:` / `fix:` / `test:` önekli
 - [ ] Testi var ve lokalde geçiyor (`uv run pytest` / `npm run lint`)
 - [ ] PR küçük (ideal < 300 satır)
-- [ ] PDF, `.env` veya gerçek LLM çağrısı yok (testler `tests/recorded/` kullanır)
+- [ ] `data/raw/` dışında PDF, `.env` veya gerçek LLM çağrısı yok (testler `tests/recorded/` kullanır)
 - [ ] `backend/schemas/` değiştiyse: 3 onay alındı
 - [ ] DB şeması değiştiyse: migration + çalışan `downgrade()` var, gidiş-dönüş denendi ve açıklamada
       **Rollback** notu var (kurallar: `.claude/skills/db-migrations/SKILL.md`)
