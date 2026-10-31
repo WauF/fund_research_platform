@@ -10,7 +10,8 @@ here instead.
   That folder is git-ignored and uploaded as a workflow artifact.
 - Never run on PRs. Run them by hand:
   - **Locally:** `uv run pytest evaluations --force-enable-socket -m extraction`
-    (reads `LLM_API_KEY` / `LLM_MODEL` from your environment).
+    (reads `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` from your environment; any
+    OpenAI-compatible endpoint works, see `extraction/llm_client.py`).
   - **GitHub:** Actions → *Evaluation* → *Run workflow*. Secrets come from the `evaluation`
     environment.
 - Mind the agreed LLM cost limit (`docs/decisions/`) before running the whole suite.
