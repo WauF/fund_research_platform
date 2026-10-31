@@ -22,7 +22,8 @@ backend/            Python 3.12 (uv)
 frontend/           Next.js (TypeScript, Tailwind, App Router)
 docs/decisions/     Karar notları
 docs/plans/         Sprint planları
-data/corpus.csv     Rapor listesi (KAP linki + SHA-256) — PDF'ler git'e girmez
+data/corpus.csv     Rapor listesi (KAP linki + SHA-256)
+data/raw/           KAP PDF'leri (<KOD>/<KOD>_<dönem>.pdf); başka yerde PDF yok
 ```
 
 ## Kurulum
@@ -74,7 +75,8 @@ Ortam değişkenleri: `cp .env.example .env`.
 - CI gerçek LLM API'sini asla çağırmaz; testler `backend/tests/recorded/` ile çalışır.
   Testlerde internet erişimi kapalıdır (yalnızca localhost). Gerçek LLM / piyasa verisi çağrıları
   `backend/evaluations/` altına yazılır ve elle tetiklenen *Evaluation* workflow'u ile çalışır.
-- PDF'ler ve `.env` git'e girmez.
+- `.env` git'e girmez. KAP PDF'leri yalnızca `data/raw/` altında durur ve üzerine yazılmaz; yeni
+  bir revizyon yeni dosya olarak eklenir (`docs/decisions/0007-pdfler-repoda.md`).
 - PR'lar küçük (ideal < 300 satır); inceleme 24 saat içinde.
 - Önemli kararlar `docs/decisions/` altına yazılır.
 - Veritabanı şeması yalnızca Alembic migration ile değişir; her migration geri alınabilir olmalı.
