@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
+from uuid import UUID, uuid4
 
 import pytest
 from pydantic import ValidationError
@@ -13,7 +14,7 @@ IRF_SCOPE = dict(
     period_start=date(2026, 9, 28),
     period_end=date(2026, 10, 2),
     report_kind=ReportKind.WEEKLY,
-    extraction_run_id="test-run",
+    extraction_run_id=uuid4(),
 )
 
 
@@ -119,6 +120,12 @@ class TestHolding:
     def test_garanti_lots_are_separate_rows(self):
         lots = [Holding(**bgp_row(row_no=i)) for i in (1, 2)]
         assert lots[0].row_no != lots[1].row_no
+
+    def test_extraction_run_id_is_uuid(self):
+        h = Holding(**bgp_row(extraction_run_id="2f1d7c9e-5b1a-4c3e-9f0a-3b6d2e8c1a47"))
+        assert isinstance(h.extraction_run_id, UUID)
+        with pytest.raises(ValidationError):
+            Holding(**bgp_row(extraction_run_id="run-1"))
 
     def test_unknown_field_rejected(self):
         with pytest.raises(ValidationError):
