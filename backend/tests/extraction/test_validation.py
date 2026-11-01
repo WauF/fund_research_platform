@@ -6,6 +6,7 @@ page text as pdfplumber prints it. Values are real; the summary is scaled to the
 
 from datetime import date
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
@@ -38,7 +39,7 @@ SCOPE = dict(
     period_start=date(2026, 9, 28),
     period_end=date(2026, 10, 2),
     report_kind=ReportKind.WEEKLY,
-    extraction_run_id="test",
+    extraction_run_id=uuid4(),
 )
 
 
