@@ -18,6 +18,7 @@ import json
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Literal, Protocol
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -108,6 +109,7 @@ class LLMExtraction:
     model: str
     prompt_version: str
     raw_output: str
+    run_id: UUID | None = None
     errors: list[str] = field(default_factory=list)
 
 
@@ -119,7 +121,7 @@ def _num(text: str, fmt: NumberFormat) -> Decimal:
 
 
 def convert(
-    report: LLMReport, meta: ReportMeta, run_id: str
+    report: LLMReport, meta: ReportMeta, run_id: UUID
 ) -> tuple[list[Holding], ReportSummary | None, list[str]]:
     """LLM rows -> schema records. A row that cannot be converted is reported, not guessed."""
     fmt = report.number_format
@@ -174,11 +176,16 @@ def convert(
 
 
 def extract_with_llm(
-    pages: list[str], meta: ReportMeta, client: LLMClient, run_id: str
+    pages: list[str], meta: ReportMeta, client: LLMClient, run_id: UUID | None = None
 ) -> LLMExtraction:
-    """One LLM call per report. Run extraction.validation on the result before using it."""
+    """One LLM call per report. Run extraction.validation on the result before using it.
+
+    run_id: the extraction run (a new one if omitted); stored on the result with model, prompt
+    version and raw output so the run can be saved.
+    """
+    run_id = run_id or uuid4()
     raw = client.complete_json(SYSTEM_PROMPT, render_pages(pages), LLMReport.model_json_schema())
-    result = LLMExtraction(meta, [], None, client.model, PROMPT_VERSION, raw)
+    result = LLMExtraction(meta, [], None, client.model, PROMPT_VERSION, raw, run_id)
     try:
         report = LLMReport.model_validate(json.loads(raw))
     except (json.JSONDecodeError, ValidationError) as exc:

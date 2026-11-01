@@ -6,6 +6,7 @@ baseline reads, and faulty replies inject the failures the design must catch.
 
 import json
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 
@@ -19,6 +20,8 @@ from extraction.llm import (
 )
 from schemas.holding import Status
 from tests.extraction.test_baseline import IRF_META, IRF_PAGES
+
+RUN_ID = uuid4()
 
 
 def tr(value: Decimal, places: int = 2) -> str:
@@ -73,7 +76,7 @@ class FakeClient:
 
 def run(reply, pages=IRF_PAGES):
     client = FakeClient(reply)
-    extraction = extract_with_llm(pages, IRF_META, client, run_id="run-1")
+    extraction = extract_with_llm(pages, IRF_META, client, run_id=RUN_ID)
     check = validate_extraction(extraction, pages)
     return client, extraction, check
 
@@ -92,7 +95,8 @@ def test_provenance_is_kept():
     client, extraction, _ = run(correct_reply())
     assert (extraction.model, extraction.prompt_version) == ("fake-model", PROMPT_VERSION)
     assert json.loads(extraction.raw_output)["number_format"] == "tr"
-    assert all(h.extraction_run_id == "run-1" for h in extraction.holdings)
+    assert extraction.run_id == RUN_ID
+    assert all(h.extraction_run_id == RUN_ID for h in extraction.holdings)
 
 
 def test_request_shape():

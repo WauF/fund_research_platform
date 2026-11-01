@@ -42,7 +42,7 @@ def reference() -> dict[str, tuple[str, Decimal, Decimal]]:
 @pytest.mark.skipif(not os.environ.get("LLM_MODEL"), reason="LLM_MODEL is not set")
 def test_irf_extraction() -> None:
     client = OpenAICompatibleClient.from_env()
-    extraction = extract_with_llm(IRF_PAGES, IRF_META, client, run_id="eval-irf")
+    extraction = extract_with_llm(IRF_PAGES, IRF_META, client)
     check = validate_extraction(extraction, IRF_PAGES)
 
     expected = reference()
@@ -64,6 +64,7 @@ def test_irf_extraction() -> None:
     out.write_text(
         json.dumps(
             {
+                "run_id": str(extraction.run_id),
                 "model": extraction.model,
                 "prompt_version": extraction.prompt_version,
                 "sub_funds_exact": exact,
