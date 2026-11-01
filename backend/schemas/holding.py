@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -62,7 +63,8 @@ class _ReportScoped(BaseModel):
     report_kind: ReportKind
     page: int = Field(ge=1, description="PDF page the value is on (1-based)")
     quote: str = Field(min_length=1, description="Verbatim text from the document; checked later")
-    extraction_run_id: str = Field(min_length=1)
+    # One id per extraction run; the run table uses it as a unique key (review on #3).
+    extraction_run_id: UUID
     status: Status = Status.OK
 
     @model_validator(mode="after")
