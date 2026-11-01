@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
+from uuid import UUID, uuid4
 
 from pydantic import ValidationError
 
@@ -177,7 +178,7 @@ def detect_meta(pages: list[str]) -> ReportMeta:
     raise UnsupportedTemplate(f"weekly report without dates in header {header!r}: pass the period")
 
 
-def _summary(pages: list[str], meta: ReportMeta, run_id: str) -> ReportSummary | None:
+def _summary(pages: list[str], meta: ReportMeta, run_id: UUID) -> ReportSummary | None:
     parts: dict[str, Decimal] = {}
     for page_no, page in enumerate(pages, 1):
         for raw in page.splitlines():
@@ -296,12 +297,14 @@ def _held_fund_code(prefix: str, asset_type: AssetType) -> str | None:
 
 
 def parse_report(
-    pages: list[str], meta: ReportMeta | None = None, run_id: str = "baseline"
+    pages: list[str], meta: ReportMeta | None = None, run_id: UUID | None = None
 ) -> BaselineResult:
     """Extract holdings and the summary from a standard-template report.
 
     meta: fund code and period; detected from the header if omitted (see detect_meta).
+    run_id: the extraction run these records belong to; a new one if omitted.
     """
+    run_id = run_id or uuid4()
     title = check_template(pages)[0].strip()
     meta = meta or detect_meta(pages)
     warnings: list[str] = []

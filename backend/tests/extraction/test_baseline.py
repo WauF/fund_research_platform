@@ -102,6 +102,12 @@ def test_irf_passes_validation(irf):
     assert all(h.status is Status.OK for h in result.holdings)
 
 
+def test_one_run_id_per_parse(irf):
+    ids = {h.extraction_run_id for h in irf.holdings} | {irf.summary.extraction_run_id}
+    assert len(ids) == 1
+    assert parse_report(IRF_PAGES, IRF_META).holdings[0].extraction_run_id not in ids
+
+
 def test_quotes_and_pages_are_real(irf):
     for h in irf.holdings:
         assert h.quote in IRF_PAGES[h.page - 1]
