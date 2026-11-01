@@ -1,0 +1,67 @@
+{
+  "root": "FA",
+  "report_summary": {
+    "fund_code": "FA",
+    "period_start": "2026-09-01",
+    "period_end": "2026-09-30",
+    "report_kind": "monthly",
+    "page": 1,
+    "quote": "Fixture summary FA 2026-09-30",
+    "extraction_run_id": "fixture:FA:2026-09",
+    "status": "ok",
+    "portfolio_value": 1,
+    "cash_equivalents": 0,
+    "receivables": 0,
+    "other_assets": 0,
+    "liabilities": 0,
+    "total_value": 1
+  },
+  "holdings": [
+    {
+      "fund_code": "FA",
+      "row_no": 1,
+      "isin": null,
+      "name": "Fund X",
+      "asset_type": "fund",
+      "held_fund_code": "FX",
+      "weight": 0.5,
+      "weight_basis": "portfolio",
+      "page": 1,
+      "quote": "A → X %50",
+      "period_start": "2026-09-01",
+      "period_end": "2026-09-30",
+      "report_kind": "monthly",
+      "instrument_code": "A",
+      "value": 0,
+      "extraction_run_id": "fixture:FA:2026-09",
+      "status": "ok"
+    },
+    {
+      "fund_code": "FA",
+      "row_no": 2,
+      "isin": "TRAASELS91H2",
+      "name": "ASELSAN",
+      "asset_type": "equity",
+      "held_fund_code": null,
+      "weight": 0.5,
+      "weight_basis": "portfolio",
+      "page": 1,
+      "quote": "A → ASELSAN %50",
+      "period_start": "2026-09-01",
+      "period_end": "2026-09-30",
+      "report_kind": "monthly",
+      "instrument_code": "A",
+      "value": 0,
+      "extraction_run_id": "fixture:FA:2026-09",
+      "status": "ok"
+    }
+  ],
+  "expected": {
+    "lookthrough": {
+      "ISIN:TRAASELS91H2": 0.5,
+      "UNRESOLVED:FUND:FX": 0.5
+    },
+    "coverage": 0.5,
+    "total": 1.0
+  }
+}
