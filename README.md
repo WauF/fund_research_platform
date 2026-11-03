@@ -44,6 +44,10 @@ docker compose up --build
   `cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --reload`
 - PDF yükleme: `curl -F "file=@rapor.pdf" http://localhost:8000/documents` — ilk yüklemede `201`,
   aynı içerik tekrar gelirse `200` ve mevcut kayıt döner (kimlik: dosyanın SHA-256'sı).
+- Okuma: `GET /documents` (sayfalı liste), `GET /documents/{id}`, `GET /documents/{id}/runs`
+  (çıkarım çalışmaları), `GET /documents/{id}/holdings` (varsayılan: en son run; `run_id`,
+  `only_ok`, `status` parametreleri, bkz. `docs/decisions/0008-extraction-run-secimi.md`).
+  Tüm uç noktalar: http://localhost:8000/docs
 
 ### Ayrı ayrı geliştirme
 

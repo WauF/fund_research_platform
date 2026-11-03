@@ -2,10 +2,11 @@
 
 from fastapi import FastAPI
 
-from app import documents
+from app import documents, extractions
 
 app = FastAPI(title="Fund Research & Exposure Platform")
 app.include_router(documents.router)
+app.include_router(extractions.router)
 
 
 @app.get("/health")

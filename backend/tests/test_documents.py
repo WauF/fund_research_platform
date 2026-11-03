@@ -1,65 +1,22 @@
-"""POST /documents: upload + SHA-256 de-duplication.
+"""/documents: upload + SHA-256 de-duplication, listing and lookup.
 
-Runs without Postgres or SeaweedFS: SQLite in memory for the DB and moto's in-process S3 mock
-(no sockets). The real stack is covered by the CI docker smoke test.
+Fixtures (SQLite in memory, moto S3 mock): tests/conftest.py.
 """
 
 import hashlib
-from collections.abc import Iterator
 
-import boto3
-import pytest
 from fastapi.testclient import TestClient
-from moto import mock_aws
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.config import Settings, get_settings
-from app.main import app
 from storage import documents
-from storage.db import Base, get_session
 from storage.models import Document
-from storage.objects import ObjectStore, get_object_store
-
-BUCKET = "documents"
+from tests.conftest import BUCKET
 
 
 def make_pdf(text: str) -> bytes:
     """Smallest byte string the endpoint accepts as a PDF; content varies with text."""
     return b"%PDF-1.4\n% " + text.encode() + b"\n%%EOF\n"
-
-
-@pytest.fixture
-def session_factory() -> Iterator[sessionmaker[Session]]:
-    # One shared connection: TestClient runs sync endpoints in a worker thread.
-    engine = create_engine(
-        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
-    )
-    Base.metadata.create_all(engine)
-    yield sessionmaker(engine)
-    engine.dispose()
-
-
-@pytest.fixture
-def s3() -> Iterator:
-    with mock_aws():
-        client = boto3.client("s3", region_name="us-east-1")
-        client.create_bucket(Bucket=BUCKET)
-        yield client
-
-
-@pytest.fixture
-def client(session_factory: sessionmaker[Session], s3) -> Iterator[TestClient]:
-    def override_session() -> Iterator[Session]:
-        with session_factory() as session:
-            yield session
-
-    app.dependency_overrides[get_session] = override_session
-    app.dependency_overrides[get_object_store] = lambda: ObjectStore(s3, BUCKET)
-    app.dependency_overrides[get_settings] = lambda: Settings(_env_file=None, max_upload_mb=1)
-    yield TestClient(app)
-    app.dependency_overrides.clear()
 
 
 def upload(client: TestClient, content: bytes, filename: str = "report.pdf"):
@@ -155,3 +112,28 @@ def test_add_document_returns_existing_row_on_race(session_factory, monkeypatch)
     assert not created
     assert loser.id == winner.id
     assert count_documents(session_factory) == 1
+
+
+def test_list_documents_newest_first_with_paging(client) -> None:
+    ids = [upload(client, make_pdf(code)).json()["id"] for code in ("irf", "tji", "tej")]
+
+    page = client.get("/documents", params={"limit": 2})
+    rest = client.get("/documents", params={"limit": 2, "offset": 2})
+
+    assert page.status_code == 200
+    assert [d["id"] for d in page.json()["items"]] == ids[::-1][:2]
+    assert page.json()["total"] == 3
+    assert [d["id"] for d in rest.json()["items"]] == ids[:1]
+
+
+def test_list_documents_rejects_bad_paging(client) -> None:
+    assert client.get("/documents", params={"limit": 0}).status_code == 422
+    assert client.get("/documents", params={"limit": 201}).status_code == 422
+    assert client.get("/documents", params={"offset": -1}).status_code == 422
+
+
+def test_get_document(client) -> None:
+    created = upload(client, make_pdf("irf")).json()
+
+    assert client.get(f"/documents/{created['id']}").json() == created
+    assert client.get("/documents/999").status_code == 404
