@@ -20,6 +20,7 @@ backend/            Python 3.12 (uv)
   tests/            pytest; fixtures/ ve recorded/ (kayıtlı LLM çıktıları)
   evaluations/      Gerçek LLM / piyasa verisi değerlendirmeleri (CI'da çalışmaz)
 frontend/           Next.js (TypeScript, Tailwind, App Router)
+docs/veri-sozlesmesi.md  Ortak veri sözleşmesi: alanlar, tablolar, yazma/okuma, API
 docs/decisions/     Karar notları
 docs/plans/         Sprint planları
 data/corpus.csv     Rapor listesi (KAP linki + SHA-256) — PDF'ler git'e girmez
