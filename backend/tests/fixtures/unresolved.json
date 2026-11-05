@@ -7,7 +7,7 @@
     "report_kind": "monthly",
     "page": 1,
     "quote": "Fixture summary FA 2026-09-30",
-    "extraction_run_id": "fixture:FA:2026-09",
+    "extraction_run_id": "78ca31f0-4760-5381-a552-0bb4c48fa27b",
     "status": "ok",
     "portfolio_value": 1,
     "cash_equivalents": 0,
@@ -33,7 +33,7 @@
       "report_kind": "monthly",
       "instrument_code": "A",
       "value": 0,
-      "extraction_run_id": "fixture:FA:2026-09",
+      "extraction_run_id": "78ca31f0-4760-5381-a552-0bb4c48fa27b",
       "status": "ok"
     },
     {
@@ -52,7 +52,7 @@
       "report_kind": "monthly",
       "instrument_code": "A",
       "value": 0,
-      "extraction_run_id": "fixture:FA:2026-09",
+      "extraction_run_id": "78ca31f0-4760-5381-a552-0bb4c48fa27b",
       "status": "ok"
     }
   ],

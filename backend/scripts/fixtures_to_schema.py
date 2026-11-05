@@ -8,6 +8,7 @@ import sys
 from datetime import date
 from pathlib import Path
 from typing import Any
+from uuid import NAMESPACE_URL, uuid5
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(BACKEND_DIR))
@@ -32,8 +33,9 @@ def _period(value: str) -> tuple[str, str]:
 
 
 def _run_id(fund_code: str, period_end: str) -> str:
-    """Tekrarlanabilir ve okunur fixture çıkarım kimliği üret."""
-    return f"fixture:{fund_code}:{period_end[:7]}"
+    """Fon ve dönemden tekrarlanabilir bir fixture UUID'si üret."""
+    key = f"fund-research-fixture:{fund_code}:{period_end[:7]}"
+    return str(uuid5(NAMESPACE_URL, key))
 
 
 def _instrument_code(quote: str) -> str | None:
@@ -98,8 +100,7 @@ def _holding(row: dict[str, Any]) -> dict[str, Any]:
             "asset_type": _asset_type(converted),
             "instrument_code": converted.get("instrument_code") or _instrument_code(quote),
             "value": converted.pop("value_tl", converted.get("value", 0)),
-            "extraction_run_id": converted.get("extraction_run_id")
-            or _run_id(fund_code, period_end),
+            "extraction_run_id": _run_id(fund_code, period_end),
             "status": converted.get("status", "ok"),
         }
     )
@@ -122,8 +123,7 @@ def _summary(summary: dict[str, Any]) -> dict[str, Any]:
             "report_kind": converted.get("report_kind", "monthly"),
             "page": converted.get("page", 1),
             "quote": converted.get("quote") or f"Fixture summary {fund_code} {period_end}",
-            "extraction_run_id": converted.get("extraction_run_id")
-            or _run_id(fund_code, period_end),
+            "extraction_run_id": _run_id(fund_code, period_end),
             "status": converted.get("status", "ok"),
             "portfolio_value": portfolio_value,
             "cash_equivalents": converted.pop(
