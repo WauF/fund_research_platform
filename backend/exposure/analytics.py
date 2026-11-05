@@ -40,8 +40,8 @@ def _clean_weights(weights: Mapping[str, float]) -> dict[str, float]:
     cleaned: dict[str, float] = {}
     for key, raw_weight in weights.items():
         weight = float(raw_weight)
-        if not isfinite(weight) or weight < 0:
-            raise ValueError(f"Ağırlık sonlu ve negatif olmayan bir sayı olmalı: {key}")
+        if not isfinite(weight):
+            raise ValueError(f"Ağırlık sonlu bir sayı olmalı: {key}")
         if weight:
             cleaned[key] = weight
     return cleaned
@@ -142,13 +142,13 @@ def herfindahl_hirschman(
     *,
     normalize: bool = True,
 ) -> float:
-    """HHI yoğunlaşmasını hesapla; 1'e yaklaştıkça portföy daha yoğunlaşmıştır."""
+    """Brüt mutlak paylarla HHI hesapla; 1'e yaklaştıkça portföy daha yoğunlaşmıştır."""
     cleaned = _clean_weights(weights)
-    total = sum(cleaned.values())
+    total = sum(abs(weight) for weight in cleaned.values())
     if not total:
         return 0.0
     scale = total if normalize else 1.0
-    return sum((weight / scale) ** 2 for weight in cleaned.values())
+    return sum((abs(weight) / scale) ** 2 for weight in cleaned.values())
 
 
 def fund_overlap(
@@ -160,16 +160,18 @@ def fund_overlap(
     """İki fonun ortak maruziyetini ``sum(min(w1, w2))`` yöntemiyle hesapla."""
     first_clean = _clean_weights(first)
     second_clean = _clean_weights(second)
-    first_total = sum(first_clean.values())
-    second_total = sum(second_clean.values())
+    first_total = sum(abs(weight) for weight in first_clean.values())
+    second_total = sum(abs(weight) for weight in second_clean.values())
     if not first_total or not second_total:
         return OverlapResult(0.0, {}, first_total, second_total)
 
     first_scale = first_total if normalize else 1.0
     second_scale = second_total if normalize else 1.0
-    shared = {
-        key: min(first_clean.get(key, 0.0) / first_scale, second_clean.get(key, 0.0) / second_scale)
-        for key in sorted(first_clean.keys() & second_clean.keys())
-    }
+    shared = {}
+    for key in sorted(first_clean.keys() & second_clean.keys()):
+        first_weight = first_clean[key]
+        second_weight = second_clean[key]
+        if first_weight * second_weight > 0:  # Zıt yönlü long/short pozisyonlar ortak sayılmaz.
+            shared[key] = min(abs(first_weight) / first_scale, abs(second_weight) / second_scale)
     shared = {key: weight for key, weight in shared.items() if weight}
     return OverlapResult(sum(shared.values()), shared, first_total, second_total)
