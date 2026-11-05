@@ -1,0 +1,49 @@
+level,parent_fund,fund_code,name,isin,isin_valid,value_tl,weight_in_parent,weight_basis,weight_portfolio_in_parent,path_weight_in_root,report_status,report_kind,report_period_start,report_period_end,note
+2,IRF,BGP,AK PORTFÖY ÜÇÜNCÜ PARA PİYASASI (TL) FONU,TRYAKPO00625,true,40073740.62,0.1059,total,0.1202,0.105900,available,monthly,2026-09-01,2026-09-30,
+2,IRF,DLY,DENİZ PORTFÖY PARA PİYASASI (TL) FONU,TRMDLYWWWWW9,true,31610615.00,0.0835,total,0.0950,0.083500,available,monthly,2026-09-01,2026-09-30,
+2,IRF,ECA,GLOBAL MD PORTFÖY BİRİNCİ DEĞİŞKEN FON,TRMECKWWWWW5,true,2370258.82,0.0063,total,0.0071,0.006300,available,weekly,2026-09-28,2026-10-02,
+2,IRF,EIB,ASTRA PORTFÖY DEĞİŞKEN FON,TRYISVH00029,true,4818269.52,0.0127,total,0.0145,0.012700,available,monthly,2026-09-01,2026-09-30,
+2,IRF,GPB,GARANTİ PORTFÖY BİRİNCİ DEĞİŞKEN FON,TRYGAPO00029,true,5977044.08,0.0158,total,0.0180,0.015800,available,monthly,2026-09-01,2026-09-30,
+2,IRF,GPZ,GARANTİ PORTFÖY ÜÇÜNCÜ PARA PİYASASI FONU,TRYGAPO00615,true,30688335.00,0.0811,total,0.0922,0.081100,available,monthly,2026-09-01,2026-09-30,
+2,IRF,GTF,AZİMUT PORTFÖY BİRİNCİ BORÇLANMA ARAÇLARI FONU,TRMBD1WWWWW5,true,2545857.88,0.0067,total,0.0077,0.006700,available,monthly,2026-09-01,2026-09-30,
+2,IRF,ICH,PARDUS PORTFÖY İKİNCİ DEĞİŞKEN FON,TRYA1PY00313,true,4373450.36,0.0116,total,0.0131,0.011600,available,monthly,2026-09-01,2026-09-30,
+2,IRF,ICN,İSTANBUL PORTFÖY ÜÇÜNCÜ İSTATİSTİKSEL ARBİTRAJ SERBEST (TL) FON,TRYISTP00539,true,157553.45,0.0004,total,0.0005,0.000400,not_found,,,,KAP'ta rapor bulunamadı
+2,IRF,IOO,İŞ PORTFÖY İKİNCİ PARA PİYASASI (TL) FON,TRYISPO00969,true,39578963.29,0.1046,total,0.1189,0.104600,available,monthly,2026-09-01,2026-09-30,
+2,IRF,IRB,İSTANBUL PORTFÖY İSTATİSTİKSEL ARBİTRAJ HİSSE SENEDİ SERBEST FON (HİSSE SENEDİ YOĞUN FON),TRYISTP00836,true,37112177.64,0.0981,total,0.1115,0.098100,available,weekly,2026-09-28,2026-10-02,
+2,IRF,NJR,NUROL PORTFÖY BİRİNCİ BORÇLANMA ARAÇLARI FONU,TRYNRPO00144,true,4351779.74,0.0115,total,0.0131,0.011500,available,monthly,2026-09-01,2026-09-30,
+2,IRF,PGD,ASTRA PORTFÖY AGRESİF DEĞİŞKEN FON,TRYQPYS00300,true,2152620.61,0.0057,total,0.0065,0.005700,available,monthly,2026-09-01,2026-09-30,
+2,IRF,PPI,YAPI KREDİ PORTFÖY ÜÇÜNCÜ PARA PİYASASI (TL) FONU,TRYYAPO00865,true,30913961.00,0.0817,total,0.0929,0.081700,available,monthly,2026-09-01,2026-09-30,
+2,IRF,PTO,PARDUS PORTFÖY TEMETTÜ ÖDEYEN ŞİRKETLER HİSSE SENEDİ FONU (HİSSE SENEDİ YOĞUN FON),TRYA1PY00537,true,3724488.84,0.0098,total,0.0112,0.009800,available,monthly,2026-09-01,2026-09-30,
+2,IRF,SUA,ÜNLÜ PORTFÖY BİRİNCİ DEĞİŞKEN FON,TRYDUUM00010,true,10796492.03,0.0285,total,0.0324,0.028500,available,monthly,2026-09-01,2026-09-30,
+2,IRF,TE4,TEB PORTFÖY BİRİNCİ DEĞİŞKEN FON,TRYTEBP00187,true,11508509.11,0.0304,total,0.0346,0.030400,available,weekly,2026-09-28,2026-10-02,
+2,IRF,TMV,TERA PORTFÖY ALGORİTMİK STRATEJİLER SERBEST FON,TRYTRPY00058,true,261168.05,0.0007,total,0.0008,0.000700,not_published,,,,"Eylül raporu yayımlanmamış, son rapor 2026-08"
+2,IRF,TPF,TACİRLER PORTFÖY BORÇLANMA ARAÇLARI FONU,TRYTACP00019,true,14822492.96,0.0392,total,0.0445,0.039200,available,monthly,2026-09-01,2026-09-30,
+2,IRF,ZBJ,ZİRAAT PORTFÖY BAŞAK PARA PİYASASI FONU,TRYZIPO00394,true,32373504.00,0.0856,total,0.0973,0.085600,available,monthly,2026-09-01,2026-09-30,
+3,ICH,AC4,Pardus para piyasası,TRYA1PY00040,true,,0.0246,total,,0.000285,available,monthly,2026-09-01,2026-09-30,
+3,ICH,AP7,Pardus hisse serbest,TRYA1PY00297,true,,0.0077,total,,0.000089,available,weekly,2026-09-28,2026-10-02,
+3,ICH,BBF,Pardus borçlanma araçları,TRYA1PY00222,true,,0.0167,total,,0.000194,available,monthly,2026-09-01,2026-09-30,
+3,ICH,KHA,Pardus hisse senedi,TRYA1PY00305,true,,0.0242,total,,0.000281,available,monthly,2026-09-01,2026-09-30,
+3,ICH,PBI,Pardus Birinci FON SEPETİ (4. seviye adayı),TRYA1PY00461,true,,0.0225,total,,0.000261,available,monthly,2026-09-01,2026-09-30,Fon sepeti → 4. seviye var; kesme kuralı nedeniyle açılmıyor
+3,ICH,PIS,Pardus,TRYA1PY00784,true,,0.0252,total,,0.000292,available,weekly,2026-09-28,2026-10-02,
+3,ICH,PKV,Pardus kısa vadeli serbest,TRYA1PY00511,true,,0.0638,total,,0.000740,available,weekly,2026-09-28,2026-10-02,
+3,TE4,IDY,TEB İkinci Değişken,TRYOYKB00013,true,,0.0258,total,,0.000784,available,weekly,2026-09-28,2026-10-02,
+3,TE4,SHE,TEB Önce Kadın Değişken,TRYTEBP00369,true,,0.0051,total,,0.000155,available,weekly,2026-09-28,2026-10-02,
+3,TE4,TPC,TEB Birinci FON SEPETİ (4. seviye adayı),TRYTEBP00062,true,,0.0190,total,,0.000578,available,weekly,2026-09-28,2026-10-02,Fon sepeti → 4. seviye var; kesme kuralı nedeniyle açılmıyor
+3,TE4,TYH,TEB Hisse Senedi,TRMTYHWWWWW3,true,,0.0070,total,,0.000213,available,weekly,2026-09-28,2026-10-02,
+3,GPB,GAL,Garanti Portföy (lotlar toplandı),TRMGA4WWWWW7,true,,0.0256,total,,0.000404,not_downloaded,,,,"Garanti lot satırları toplandı (2,50+0,06)"
+3,GPB,GTL,Garanti Portföy,TRYGRAN00530,true,,0.0184,total,,0.000291,not_downloaded,,,,
+3,GPB,GUK,Garanti Portföy,TRYGAPO01571,true,,0.0022,total,,0.000035,not_downloaded,,,,
+3,GPB,GOL,Garanti Portföy,TRYGAPO01274,true,,0.0009,total,,0.000014,not_downloaded,,,,
+3,GTF,KVS,Azimut Portföy,TRYAZIM01075,true,,0.0063,total,,0.000042,available,weekly,2026-09-28,2026-10-02,
+3,EIB,EID,Astra Hisse Senedi,,,,0.0163,unknown,,0.000207,available,monthly,2026-09-01,2026-09-30,Tekrar eden maruziyet: hem EIB hem PGD içinde
+3,EIB,OJH,Astra Hisse Serbest,,,,0.0047,unknown,,0.000060,not_downloaded,,,,
+3,EIB,RP8,Re-Pie girişim sermayesi (GSYF),,,,0.0350,unknown,,0.000445,expected_unresolved,,,,GSYF/GYF aylık portföy raporu yayımlamaz
+3,EIB,RPF,Re-Pie girişim sermayesi (GSYF),,,,0.0444,unknown,,0.000564,expected_unresolved,,,,GSYF/GYF aylık portföy raporu yayımlamaz
+3,EIB,RR1,Re-Pie girişim sermayesi (GSYF),,,,0.0342,unknown,,0.000434,expected_unresolved,,,,GSYF/GYF aylık portföy raporu yayımlamaz
+3,EIB,RR9,Re-Pie girişim sermayesi (GSYF),,,,0.0057,unknown,,0.000072,expected_unresolved,,,,GSYF/GYF aylık portföy raporu yayımlamaz
+3,EIB,RTF,Re-Pie girişim sermayesi (GSYF),,,,0.0109,unknown,,0.000138,expected_unresolved,,,,GSYF/GYF aylık portföy raporu yayımlamaz
+3,EIB,YD3,Primo gayrimenkul yatırım fonu (GYF),,,,0.0211,unknown,,0.000268,expected_unresolved,,,,GSYF/GYF aylık portföy raporu yayımlamaz
+3,PGD,EID,Astra Hisse Senedi,,,,0.0700,unknown,,0.000399,available,monthly,2026-09-01,2026-09-30,Tekrar eden maruziyet: hem EIB hem PGD içinde
+3,NJR,NLK,Nurol kısa vadeli serbest (OCR),TRYNRPO00508,true,,0.0867,total,,0.000997,available,weekly,2026-09-28,2026-10-04,"NJR taranmış PDF, OCR ile okundu"
+3,NJR,NPTLRF,"Nurol (OCR, kod belirsiz)",TRYNRPO00789,true,,0.0043,total,,0.000049,not_downloaded,,,,"NJR taranmış PDF, OCR ile okundu"
+3,SUA,FGS,QNB gümüş borsa yatırım fonu (BYF),,,,0.0456,unknown,,0.001300,available,weekly,,,"Borsa kodu GMSTR; KAP fon kodu FGS (SUA raporunda ad ""QNB Finans Portföy Gümüş BYF"" diye geçiyor)"
