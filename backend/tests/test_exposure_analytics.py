@@ -89,6 +89,7 @@ def test_hhi_and_overlap_normalize_incomplete_portfolios() -> None:
     assert fund_overlap(incomplete, {"A": 0.25, "B": 0.25}).score == pytest.approx(1.0)
 
 
-def test_negative_weights_are_rejected() -> None:
-    with pytest.raises(ValueError, match="negatif olmayan"):
-        herfindahl_hirschman({"A": -0.1})
+def test_negative_weights_use_gross_exposure_and_opposite_sides_do_not_overlap() -> None:
+    assert herfindahl_hirschman({"LONG": 0.6, "SHORT": -0.4}) == pytest.approx(0.52)
+    assert fund_overlap({"A": -0.5}, {"A": -0.2}).score == pytest.approx(1.0)
+    assert fund_overlap({"A": -0.5}, {"A": 0.2}).score == 0.0
