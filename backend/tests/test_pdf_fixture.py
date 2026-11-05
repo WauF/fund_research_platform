@@ -21,7 +21,7 @@ def _holding(quote: str, weight: str, value: str = "40073740.62") -> Holding:
         report_kind=ReportKind.WEEKLY,
         page=1,
         quote=quote,
-        extraction_run_id="test",
+        extraction_run_id="2f1d7c9e-5b1a-4c3e-9f0a-3b6d2e8c1a47",
         row_no=1,
         name="BGP-AK PORTFÖY",
         asset_type=AssetType.FUND,
@@ -40,7 +40,7 @@ def _summary() -> ReportSummary:
         report_kind=ReportKind.WEEKLY,
         page=2,
         quote="FON TOPLAM DEĞERİ 378.395.976,36 100,00 %",
-        extraction_run_id="test",
+        extraction_run_id="2f1d7c9e-5b1a-4c3e-9f0a-3b6d2e8c1a47",
         portfolio_value=Decimal("332870561.22"),
         total_value=Decimal("378395976.36"),
     )
