@@ -142,7 +142,7 @@ jobs:
         if: always()
         run: docker compose down -v
 
-  # Repo hygiene from .pre-commit-config.yaml (no PDFs, no .env, no private keys, large files,
+  # Repo hygiene from .pre-commit-config.yaml (PDFs only under data/raw/, no .env, no private keys, large files,
   # whitespace...). Catches PRs from anyone who skipped `pre-commit install`. Ruff hooks are
   # skipped here because the backend job already runs ruff at the locked version.
   hygiene:

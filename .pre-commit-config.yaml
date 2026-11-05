@@ -11,6 +11,7 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: ["--maxkb=1024"]
+        exclude: ^data/raw/  # KAP PDFs, up to ~5 MB each (decision 0007)
       - id: detect-private-key
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
@@ -25,10 +26,11 @@ repos:
   - repo: local
     hooks:
       - id: no-pdfs
-        name: PDFs must not be committed (use data/corpus.csv)
-        entry: PDF files are not allowed in the repo
+        name: PDFs only under data/raw/ (decision 0007)
+        entry: PDF files are only allowed under data/raw/
         language: fail
         files: \.pdf$
+        exclude: ^data/raw/
       - id: no-env
         name: .env must not be committed
         entry: .env files are not allowed in the repo (use .env.example)
