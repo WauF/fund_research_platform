@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import math
 import sys
 from collections import defaultdict
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -18,13 +16,12 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = ROOT_DIR.parent
 RESULTS_DIR = ROOT_DIR / "evaluations" / "results"
-CORPUS_PATH = PROJECT_ROOT / "data" / "corpus.csv"
 sys.path.insert(0, str(ROOT_DIR))
 
+from evaluations.pdf_fixture import load_pdf_fixture  # noqa: E402
 from exposure.graph import build_graph, node_key  # noqa: E402
-from schemas.holding import Holding, ReportKind  # noqa: E402
+from schemas.holding import Holding  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -65,46 +62,6 @@ def load_fixture(path: Path) -> dict[str, Any]:
         raise TypeError("Fixture içindeki 'holdings' alanı bir liste olmalı")
     data["_path"] = resolved_path
     return data
-
-
-def load_pdf_fixture(path: Path) -> dict[str, Any]:
-    """Corpus kaydındaki dönem bilgisiyle bir PDF'i Holding listesine ayrıştır."""
-    try:
-        from extraction.baseline import ReportMeta, parse_report
-        from extraction.pdf_text import extract_pages
-    except ModuleNotFoundError as exc:
-        raise RuntimeError(
-            "PDF çizimi Akif'in extraction-baseline dalı merge edildikten sonra kullanılabilir"
-        ) from exc
-    with CORPUS_PATH.open(encoding="utf-8", newline="") as corpus_file:
-        rows = list(csv.DictReader(corpus_file))
-    corpus_row = next(
-        (row for row in rows if (PROJECT_ROOT / row["local_path"]).resolve() == path),
-        None,
-    )
-    if corpus_row is None:
-        raise ValueError(f"PDF data/corpus.csv içinde bulunamadı: {path}")
-    if not corpus_row["period_start"] or not corpus_row["period_end"]:
-        raise ValueError(f"PDF dönem bilgisi eksik: {path}")
-
-    meta = ReportMeta(
-        fund_code=corpus_row["fund_code"],
-        period_start=date.fromisoformat(corpus_row["period_start"]),
-        period_end=date.fromisoformat(corpus_row["period_end"]),
-        report_kind=ReportKind(corpus_row["report_kind"]),
-    )
-    result = parse_report(extract_pages(path), meta)
-    for warning in result.warnings:
-        print(f"{meta.fund_code} uyarı: {warning}")
-    return {
-        "root": meta.fund_code,
-        "holdings": [holding.model_dump(mode="json") for holding in result.holdings],
-        "report_summary": {
-            "fund_code": meta.fund_code,
-            "period_end": meta.period_end.isoformat(),
-        },
-        "_path": path,
-    }
 
 
 def reachable_graph(graph: nx.DiGraph, root: str) -> nx.DiGraph:
