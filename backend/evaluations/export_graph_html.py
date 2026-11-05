@@ -8,6 +8,7 @@ import math
 import sys
 import webbrowser
 from collections import defaultdict
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,12 @@ TEMPLATE_PATH = BACKEND_DIR / "evaluations" / "templates" / "graph.html"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from evaluations.pdf_fixture import load_pdf_fixture  # noqa: E402
+from exposure.analytics import (  # noqa: E402
+    compare_methods,
+    direct_exposures,
+    fund_overlap,
+    herfindahl_hirschman,
+)
 from exposure.graph import build_graph, node_key  # noqa: E402
 from exposure.lookthrough import look_through  # noqa: E402
 from schemas.holding import Holding  # noqa: E402
@@ -313,6 +320,101 @@ def _report_data(fixtures: list[dict[str, Any]]) -> list[dict[str, str]]:
     return reports
 
 
+def _analytics_data(
+    graph: nx.DiGraph,
+    root: str,
+    node_labels: dict[str, str],
+) -> dict[str, Any]:
+    """Matris kontrolü, HHI ve fonlar arası overlap sonuçlarını HTML için hazırla."""
+    method = compare_methods(graph, root)
+    largest_differences = sorted(
+        method.differences.items(), key=lambda item: (-abs(item[1]), item[0])
+    )[:5]
+
+    funds = sorted(
+        node
+        for node in graph
+        if graph.nodes[node].get("kind") == "fund" and graph.out_degree(node) > 0
+    )
+    distributions: dict[str, dict[str, float]] = {}
+    hhi_rows: list[dict[str, Any]] = []
+    for fund in funds:
+        direct = direct_exposures(graph, fund)
+        opened = look_through(graph, fund, cutoff=0).exposures
+        distributions[fund] = opened
+        reported_hhi = herfindahl_hirschman(direct)
+        lookthrough_hhi = herfindahl_hirschman(opened)
+        hhi_rows.append(
+            {
+                "fund": fund,
+                "label": node_labels.get(fund, fund.removeprefix("FUND:")),
+                "reported": reported_hhi,
+                "lookthrough": lookthrough_hhi,
+                "change": lookthrough_hhi - reported_hhi,
+                "reported_effective_positions": 1 / reported_hhi if reported_hhi else 0.0,
+                "lookthrough_effective_positions": 1 / lookthrough_hhi if lookthrough_hhi else 0.0,
+            }
+        )
+
+    overlap_rows: list[dict[str, Any]] = []
+    for first, second in combinations(funds, 2):
+        overlap = fund_overlap(distributions[first], distributions[second])
+        shared = sorted(overlap.shared.items(), key=lambda item: (-item[1], item[0]))
+        overlap_rows.append(
+            {
+                "first": first,
+                "second": second,
+                "first_label": node_labels.get(first, first.removeprefix("FUND:")),
+                "second_label": node_labels.get(second, second.removeprefix("FUND:")),
+                "score": overlap.score,
+                "shared_count": len(shared),
+                "top_shared": [
+                    {
+                        "id": node,
+                        "label": node_labels.get(
+                            node.removeprefix("UNRESOLVED:"),
+                            node.removeprefix("UNRESOLVED:"),
+                        ),
+                        "weight": weight,
+                    }
+                    for node, weight in shared[:5]
+                ],
+            }
+        )
+    overlap_rows.sort(
+        key=lambda item: (
+            item["first"] != root and item["second"] != root,
+            -item["score"],
+            item["first"],
+            item["second"],
+        )
+    )
+    hhi_rows.sort(key=lambda item: (item["fund"] != root, item["fund"]))
+    return {
+        "matrix_comparison": {
+            "matches": method.matches,
+            "tolerance": method.tolerance,
+            "max_abs_difference": method.max_abs_difference,
+            "recursive_total": sum(method.recursive.values()),
+            "matrix_total": sum(method.matrix.values()),
+            "leaf_count": len(method.recursive.keys() | method.matrix.keys()),
+            "largest_differences": [
+                {
+                    "id": node,
+                    "label": node_labels.get(
+                        node.removeprefix("UNRESOLVED:"),
+                        node.removeprefix("UNRESOLVED:"),
+                    ),
+                    "difference": difference,
+                }
+                for node, difference in largest_differences
+            ],
+        },
+        "hhi": hhi_rows,
+        "overlap": overlap_rows,
+    }
+
+
 def prepare_graph_data(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
     """Fixture'ları vis-network için düğüm, kenar ve özet verisine dönüştür."""
     if not fixtures:
@@ -325,7 +427,7 @@ def prepare_graph_data(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
         raise ValueError(f"Kök düğüm grafta bulunamadı: {root}")
     reachable = {root, *nx.descendants(full_graph, root)}
     graph = full_graph.subgraph(reachable).copy()
-    result = look_through(graph, root, top_k_paths=12)
+    result = look_through(graph, root, top_k_paths=12, cutoff=0)
     effective = _node_effective_weights(graph, root)
 
     rows_by_node: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -424,6 +526,7 @@ def prepare_graph_data(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
     )
     unresolved_total = sum(result.unresolved.values())
     node_labels = {node["id"]: node["label"] for node in nodes}
+    analytics = _analytics_data(graph, root, node_labels)
     lookthrough_exposures = []
     for exposure_id, weight in sorted(
         result.exposures.items(), key=lambda item: (-item[1], item[0])
@@ -484,6 +587,7 @@ def prepare_graph_data(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
         "edges": edges,
         "layouts": layouts,
         "reports": reports,
+        "analytics": analytics,
         "lookthrough": {
             "total": result.total,
             "coverage": result.coverage,

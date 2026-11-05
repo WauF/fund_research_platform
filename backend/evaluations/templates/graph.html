@@ -69,6 +69,10 @@
     th, td { padding: 6px 4px; border-bottom: 1px solid #e6edf3; text-align: left; }
     th:last-child, td:last-child { text-align: right; }
     .comparison-table th:not(:first-child), .comparison-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+    .explanation { padding: 9px 10px; border-left: 4px solid #8cc8e8; border-radius: 6px; background: #eef4f8; }
+    .status-ok { color: #287d46; font-weight: 750; }
+    .status-error { color: #b42318; font-weight: 750; }
+    .table-scroll { overflow-x: auto; }
     .legend {
       position: fixed; z-index: 14; right: 14px; bottom: 14px; padding: 9px 11px;
       border: 1px solid #d7e0ea; border-radius: 9px; background: rgba(255,255,255,.93);
@@ -103,7 +107,7 @@
       <button id="collapseAll" type="button">Fonları kapat</button>
       <button id="showAllPositions" type="button">Tüm pozisyonlar</button>
       <button id="layoutToggle" type="button">Hiyerarşik</button>
-      <button id="lookthroughResults" type="button">Look-through çıktısı</button>
+      <button id="lookthroughResults" type="button">Look-through ve analiz</button>
       <span class="zoom-controls">
         <button id="zoomOut" type="button" title="Uzaklaştır">−</button>
         <button id="zoomIn" type="button" title="Yakınlaştır">+</button>
@@ -179,6 +183,11 @@
         return `%${n.toLocaleString("tr-TR", {minimumFractionDigits: digits, maximumFractionDigits: digits})}`;
       };
       const signedPercent = value => `${Number(value) > 0 ? "+" : (Number(value) < 0 ? "−" : "")}${percent(Math.abs(Number(value || 0)))}`;
+      const decimal = (value, digits = 4) => Number(value || 0).toLocaleString("tr-TR", {
+        minimumFractionDigits: digits, maximumFractionDigits: digits
+      });
+      const signedDecimal = (value, digits = 6) => `${Number(value) > 0 ? "+" : (Number(value) < 0 ? "−" : "")}${decimal(Math.abs(Number(value || 0)), digits)}`;
+      const scientific = value => Number(value || 0).toExponential(3).replace(".", ",");
       const cleanId = id => id.replace(/^FUND:/, "").replace(/^ISIN:/, "").replace(/^NAME:/, "");
       const pathText = path => path.map(id => esc(cleanId(id))).join(" → ");
       const parentShares = node => Object.entries(node.direct_weights || {})
@@ -569,15 +578,20 @@
         const top = raw.summary.unresolved_top.map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
         const exposureTop = (raw.lookthrough?.exposures || []).slice(0, 5)
           .map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
+        const matrix = raw.analytics?.matrix_comparison || {};
+        const rootHhi = (raw.analytics?.hhi || []).find(item => item.fund === raw.root) || {};
         document.getElementById("summary").innerHTML = `<strong>${esc(cleanId(raw.root))}</strong><br>` +
           `Raporlar: ${reports}<br>Graf: ${raw.summary.node_count} düğüm / ${raw.summary.edge_count} kenar · ` +
           `Kök toplamı: ${percent(raw.summary.root_total)} · Look-through coverage: ${percent(raw.lookthrough?.coverage)}<br>` +
+          `Matris kontrolü: ${matrix.matches ? "uyumlu" : "uyumsuz"} · HHI: ${decimal(rootHhi.reported)} → ${decimal(rootHhi.lookthrough)}<br>` +
           `En büyük etkin exposure: ${exposureTop}<br>Unresolved: ${percent(raw.summary.unresolved_total)} · ${top}` +
           ` · Cutoff: ${percent(raw.summary.cut_off_total)}`;
       }
 
       function showLookthroughResults() {
         const result = raw.lookthrough || {exposures: [], unresolved: [], cut_off: [], cycles: []};
+        const analytics = raw.analytics || {matrix_comparison: {}, hhi: [], overlap: []};
+        const matrix = analytics.matrix_comparison || {};
         const comparisonRows = (result.comparison || []).map(item => {
           const color = item.change > 0 ? "#287d46" : (item.change < 0 ? "#b42318" : "#627d98");
           return `<tr><td>${esc(item.label)}<br><small>${esc(item.status)}</small></td>` +
@@ -596,8 +610,23 @@
           ? result.cycles.map(cycle => pathText(cycle)).join("<br>") : "Yok";
         const dates = Object.entries(result.report_dates || {})
           .map(([fund, date]) => `${esc(fund)}: ${esc(date || "tarih yok")}`).join(" · ") || "—";
+        const matrixDifferences = (matrix.largest_differences || []).map(item =>
+          `<tr><td>${esc(item.label)}</td><td>${scientific(item.difference)}</td></tr>`).join("");
+        const hhiRows = (analytics.hhi || []).map(item => {
+          const direction = item.change > 1e-12 ? "Yoğunlaşma arttı" :
+            (item.change < -1e-12 ? "Yoğunlaşma azaldı" : "Değişmedi");
+          return `<tr><td>${esc(item.label)}</td><td>${decimal(item.reported)}</td>` +
+            `<td>${decimal(item.lookthrough)}</td><td>${signedDecimal(item.change)}</td>` +
+            `<td>${decimal(item.lookthrough_effective_positions, 1)}<br><small>${direction}</small></td></tr>`;
+        }).join("");
+        const overlapRows = (analytics.overlap || []).slice(0, 25).map(item => {
+          const shared = (item.top_shared || []).map(position =>
+            `${esc(position.label)} ${percent(position.weight)}`).join(", ") || "Ortak yaprak yok";
+          return `<tr><td>${esc(item.first_label)} ↔ ${esc(item.second_label)}<br>` +
+            `<small>${item.shared_count} ortak varlık · ${shared}</small></td><td>${percent(item.score)}</td></tr>`;
+        }).join("") || `<tr><td colspan="2">Karşılaştırılabilecek ikinci bir açılmış fon yok.</td></tr>`;
         document.getElementById("detailsBody").innerHTML = `
-          <h2>Look-through çıktısı</h2>
+          <h2>Look-through ve risk analizi</h2>
           <div class="metric-grid">
             <div class="metric">Coverage<b>${percent(result.coverage)}</b></div>
             <div class="metric">Toplam<b>${percent(result.total)}</b></div>
@@ -610,6 +639,23 @@
           <p><b>Unresolved:</b> ${unresolved}</p>
           <p><b>Cutoff ile açılmayan:</b> ${cutOff}</p>
           <p><b>Cycle:</b><br>${cycles}</p>
+          <h3>1. Recursive / matris doğrulaması</h3>
+          <p class="explanation">Aynı etkin ağırlıklar iki bağımsız yöntemle hesaplanır. Recursive yöntem yolları tek tek açar; matris yöntemi <b>(I−F)</b> doğrusal sistemini çözer. En büyük fark 10<sup>−9</sup> toleransının altındaysa sonuç doğrulanmış kabul edilir.</p>
+          <div class="metric-grid">
+            <div class="metric">Sonuç<b class="${matrix.matches ? "status-ok" : "status-error"}">${matrix.matches ? "UYUMLU" : "UYUMSUZ"}</b></div>
+            <div class="metric">En büyük mutlak fark<b>${scientific(matrix.max_abs_difference)}</b></div>
+            <div class="metric">Tolerans<b>${scientific(matrix.tolerance)}</b></div>
+            <div class="metric">Karşılaştırılan yaprak<b>${matrix.leaf_count || 0}</b></div>
+            <div class="metric">Recursive toplam<b>${percent(matrix.recursive_total)}</b></div>
+            <div class="metric">Matris toplam<b>${percent(matrix.matrix_total)}</b></div>
+          </div>
+          <table><thead><tr><th>En büyük farkların varlığı</th><th>Matris − recursive</th></tr></thead><tbody>${matrixDifferences}</tbody></table>
+          <h3>2. HHI yoğunlaşma analizi</h3>
+          <p class="explanation">HHI, normalize edilmiş brüt mutlak pozisyon paylarının kareleri toplamıdır; türevlerdeki negatif ağırlıklar bu yüzden kaybolmaz. Değer yükseldikçe portföy daha az sayıda varlıkta yoğunlaşır. <b>1 / HHI</b>, aynı yoğunlaşmayı veren yaklaşık eşit ağırlıklı pozisyon sayısını gösterir.</p>
+          <div class="table-scroll"><table class="comparison-table"><thead><tr><th>Fon</th><th>Raporlanan</th><th>Look-through</th><th>HHI farkı</th><th>Etkin pozisyon</th></tr></thead><tbody>${hhiRows}</tbody></table></div>
+          <h3>3. Fon overlap analizi</h3>
+          <p class="explanation">Overlap, iki fonun aynı yöndeki nihai varlıklarında küçük brüt payların toplamıdır: <b>Σ min(|w₁|, |w₂|)</b>. Long-short gibi zıt yönler ortak sayılmaz. %100 aynı dağılımı, %0 hiç ortak nihai varlık olmadığını gösterir. Aşağıda en yüksek 25 çift ve en büyük ortak pozisyonları yer alır.</p>
+          <table><thead><tr><th>Fon çifti / ortak varlıklar</th><th>Overlap</th></tr></thead><tbody>${overlapRows}</tbody></table>
           <h3>Look-through öncesi / sonrası</h3>
           <p>Önce, kök fon raporundaki doğrudan paydır. Sonra, bütün alt fon yolları açıldıktan sonraki etkin yaprak payıdır.</p>
           <table class="comparison-table"><thead><tr><th>Varlık</th><th>Önce</th><th>Sonra</th><th>Fark</th></tr></thead>
