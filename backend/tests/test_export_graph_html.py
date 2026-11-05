@@ -6,6 +6,7 @@ import pytest
 
 from evaluations.export_graph_html import (
     _node_effective_weights,
+    calculate_full_radial_layout,
     calculate_radial_layout,
     prepare_graph_data,
 )
@@ -87,3 +88,18 @@ def test_radial_layout_keeps_subfund_leaves_in_its_slice() -> None:
             )
         )
         assert distance <= fund_slice["span"] / 2
+
+
+def test_full_radial_layout_positions_every_node_once() -> None:
+    fixture = load_fixture("slide8.json")
+    graph = build_graph([Holding.model_validate(row) for row in fixture["holdings"]])
+    root = "FUND:FA"
+    positions = calculate_full_radial_layout(
+        graph,
+        root,
+        _node_effective_weights(graph, root),
+    )
+
+    assert positions[root] == {"x": 0.0, "y": 0.0}
+    assert set(positions) == set(graph)
+    assert len({(position["x"], position["y"]) for position in positions.values()}) == len(graph)

@@ -18,6 +18,7 @@ RESULTS_DIR = BACKEND_DIR / "evaluations" / "results"
 TEMPLATE_PATH = BACKEND_DIR / "evaluations" / "templates" / "graph.html"
 sys.path.insert(0, str(BACKEND_DIR))
 
+from evaluations.pdf_fixture import load_pdf_fixture  # noqa: E402
 from exposure.graph import build_graph, node_key  # noqa: E402
 from exposure.lookthrough import look_through  # noqa: E402
 from schemas.holding import Holding  # noqa: E402
@@ -156,6 +157,70 @@ def calculate_radial_layout(
     return {"positions": positions, "fund_slices": fund_slices}
 
 
+def calculate_full_radial_layout(
+    graph: nx.DiGraph,
+    root: str,
+    effective: dict[str, float],
+) -> dict[str, dict[str, float]]:
+    """Bütün erişilebilir düğümleri çakışmayan eş merkezli halkalara yerleştir."""
+    positions: dict[str, dict[str, float]] = {root: {"x": 0.0, "y": 0.0}}
+    depths = nx.single_source_shortest_path_length(graph, root)
+    levels: defaultdict[int, list[str]] = defaultdict(list)
+    primary_parent: dict[str, str] = {}
+    branch: dict[str, str] = {root: root}
+
+    for node, depth in sorted(depths.items(), key=lambda item: (item[1], item[0])):
+        if node == root:
+            continue
+        parents = [parent for parent in graph.predecessors(node) if depths.get(parent) == depth - 1]
+        parent = max(
+            parents,
+            key=lambda candidate: (
+                _edge_contribution(candidate, node, graph, effective),
+                candidate,
+            ),
+            default=root,
+        )
+        primary_parent[node] = parent
+        branch[node] = node if parent == root else branch.get(parent, parent)
+        levels[depth].append(node)
+
+    root_order = {
+        node: index
+        for index, node in enumerate(
+            sorted(
+                levels.get(1, []),
+                key=lambda target: (
+                    -_edge_contribution(root, target, graph, effective),
+                    target,
+                ),
+            )
+        )
+    }
+    previous_radius = 0.0
+    for depth in sorted(levels):
+        ordered = sorted(
+            levels[depth],
+            key=lambda node: (
+                root_order.get(branch[node], len(root_order)),
+                primary_parent.get(node, ""),
+                -effective.get(node, 0.0),
+                node,
+            ),
+        )
+        # Büyük halkalarda düğümler arasında en az yaklaşık 32 px yay mesafesi bırak.
+        capacity_radius = len(ordered) * 32.0 / (2 * math.pi)
+        radius = max(R1 + (depth - 1) * 360.0, previous_radius + 280.0, capacity_radius)
+        previous_radius = radius
+        for index, node in enumerate(ordered):
+            angle = -math.pi / 2 + 2 * math.pi * index / max(len(ordered), 1)
+            positions[node] = {
+                "x": radius * math.cos(angle),
+                "y": radius * math.sin(angle),
+            }
+    return positions
+
+
 def parse_args() -> argparse.Namespace:
     """JSON yollarını ve tarayıcıda açma seçeneğini al."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -165,8 +230,10 @@ def parse_args() -> argparse.Namespace:
 
 
 def load_fixture(path: Path) -> dict[str, Any]:
-    """Fixture JSON'unu oku ve çizim için gereken alanları doğrula."""
+    """Fixture JSON'unu veya corpus PDF'ini çizim için yükle."""
     resolved = (path if path.is_absolute() else Path.cwd() / path).resolve()
+    if resolved.suffix.casefold() == ".pdf":
+        return load_pdf_fixture(resolved)
     with resolved.open(encoding="utf-8") as fixture_file:
         fixture = json.load(fixture_file)
     missing = {"root", "holdings"} - fixture.keys()
@@ -336,7 +403,11 @@ def prepare_graph_data(fixtures: list[dict[str, Any]]) -> dict[str, Any]:
         for node in graph
         if node != root and graph.nodes[node].get("kind") == "fund" and graph.out_degree(node) > 0
     }
-    layouts: dict[str, Any] = {"radial": {}, "drilldown": {}}
+    layouts: dict[str, Any] = {
+        "radial": {},
+        "drilldown": {},
+        "full": {"positions": calculate_full_radial_layout(graph, root, effective)},
+    }
     for top_n in range(1, 41):
         layouts["radial"][str(top_n)] = {
             "collapsed": calculate_radial_layout(graph, root, effective, top_n),

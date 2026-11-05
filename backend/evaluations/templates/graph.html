@@ -50,7 +50,6 @@
       font-size: 12.5px; line-height: 1.45; pointer-events: none;
     }
     .summary strong { font-size: 15px; }
-    .warning { color: #c62828; font-weight: 750; }
     .details {
       position: fixed; z-index: 18; top: 72px; right: 12px; bottom: 12px; width: 360px;
       overflow: auto; padding: 14px; border: 1px solid #d7e0ea; border-radius: 11px;
@@ -100,8 +99,9 @@
     <div id="network" aria-label="Etkileşimli exposure grafı"></div>
     <div class="topbar">
       <input id="search" type="search" placeholder="Ad, ISIN veya fon kodu ara…">
-      <button id="expandAll" type="button">Tümünü aç</button>
-      <button id="collapseAll" type="button">Tümünü kapat</button>
+      <button id="expandAll" type="button">Fonları aç</button>
+      <button id="collapseAll" type="button">Fonları kapat</button>
+      <button id="showAllPositions" type="button">Tüm pozisyonlar</button>
       <button id="layoutToggle" type="button">Hiyerarşik</button>
       <button id="lookthroughResults" type="button">Look-through çıktısı</button>
       <span class="zoom-controls">
@@ -148,6 +148,7 @@
       const expanded = new Set([raw.root]);
       const forced = new Set();
       let topN = 12;
+      let showAllNodes = false;
       let showUnresolved = true;
       let hierarchical = false;
       let drillRoot = raw.root;
@@ -158,8 +159,9 @@
       let viewTouched = false;
       let topTimer;
       let activePositions = {};
-      const nodes = new vis.DataSet();
-      const edges = new vis.DataSet();
+      let largeView = false;
+      let nodes = new vis.DataSet();
+      let edges = new vis.DataSet();
       const visibleMeta = new Map();
       const maxEdgeContribution = Math.max(...raw.edges.map(edge => edge.effective_weight || 0), 1e-8);
       const palette = {
@@ -172,7 +174,9 @@
       })[char]);
       const percent = value => {
         const n = Number(value || 0) * 100;
-        return `%${n.toLocaleString("tr-TR", {minimumFractionDigits: n < 1 ? 2 : 1, maximumFractionDigits: n < 1 ? 2 : 1})}`;
+        const magnitude = Math.abs(n);
+        const digits = magnitude === 0 ? 2 : (magnitude < .001 ? 6 : (magnitude < .01 ? 4 : (magnitude < 1 ? 2 : 1)));
+        return `%${n.toLocaleString("tr-TR", {minimumFractionDigits: digits, maximumFractionDigits: digits})}`;
       };
       const signedPercent = value => `${Number(value) > 0 ? "+" : (Number(value) < 0 ? "−" : "")}${percent(Math.abs(Number(value || 0)))}`;
       const cleanId = id => id.replace(/^FUND:/, "").replace(/^ISIN:/, "").replace(/^NAME:/, "");
@@ -205,25 +209,35 @@
         return label;
       }
 
-      function visNode(node, collapsed = false, position = {}) {
+      function visNode(node, collapsed = false, position = {}, inlineFundLabel = false) {
         const shared = node.multi_path;
         const unresolved = node.type === "unresolved";
         const isViewRoot = node.id === drillRoot;
-        const label = isViewRoot || hierarchical ? nodeLabel(node, collapsed) : "";
-        const fill = isViewRoot ? palette.root : (palette[node.type] || palette.other);
-        const size = isViewRoot ? 42 : Math.min(55, Math.max(5, 70 * Math.sqrt(Math.max(node.effective_weight || 0, 0))));
+        const isFund = ["fund", "unresolved"].includes(node.type);
+        const label = isViewRoot
+          ? `${node.label}\n${node.id === raw.root ? "KÖK FON" : "ODAK FON"}`
+          : ((hierarchical || (inlineFundLabel && isFund)) ? nodeLabel(node, collapsed) : "");
+        const fill = isViewRoot ? "#0b3a63" : (palette[node.type] || palette.other);
+        const size = isViewRoot ? 56 : Math.min(55, Math.max(5, 70 * Math.sqrt(Math.max(node.effective_weight || 0, 0))));
+        const border = isViewRoot ? "#f5b841" : (shared ? "#f28c28" : (unresolved ? "#8b1e1e" : "#243b53"));
         return {
           id: node.id, label, title: tooltip(node), size,
           shape: "dot", color: {
             background: fill,
-            border: shared ? "#f28c28" : (unresolved ? "#8b1e1e" : "#243b53"),
+            border,
             highlight: {background: fill, border: "#f28c28"},
             hover: {background: fill, border: "#f28c28"}
           },
-          borderWidth: shared ? 5 : (unresolved ? 3 : 2),
+          borderWidth: isViewRoot ? 6 : (shared ? 5 : (unresolved ? 3 : 2)),
           borderWidthSelected: 6,
-          shapeProperties: {borderDashes: unresolved ? [7, 5] : false},
-          font: {color: isViewRoot ? "#ffffff" : "#102a43", face: "system-ui", size: drillRoot === raw.root ? 15 : 13, strokeWidth: 4, strokeColor: "#f7f9fc"},
+          shapeProperties: {borderDashes: unresolved && !isViewRoot ? [7, 5] : false},
+          font: {
+            color: isViewRoot ? "#ffffff" : "#102a43", face: "system-ui",
+            size: isViewRoot ? 18 : (drillRoot === raw.root ? 15 : 13),
+            strokeWidth: isViewRoot ? 2 : 4,
+            strokeColor: isViewRoot ? "#061a2b" : "#f7f9fc"
+          },
+          shadow: isViewRoot ? {enabled: true, color: "rgba(11,58,99,.35)", size: 18, x: 0, y: 0} : false,
           fixed: false, x: position.x, y: position.y, opacity: 1
         };
       }
@@ -295,9 +309,12 @@
         const visibleNodes = new Map();
         const visibleEdges = new Map();
         const queue = [drillRoot];
+        const visitedSources = new Set();
         visibleNodes.set(drillRoot, byId.get(drillRoot));
         while (queue.length) {
           const source = queue.shift();
+          if (visitedSources.has(source)) continue;
+          visitedSources.add(source);
           const sourceNode = byId.get(source);
           if (source !== drillRoot && sourceNode?.opened_fund && !expanded.has(source)) continue;
           let candidates = (outgoing.get(source) || []).filter(edge => {
@@ -306,7 +323,9 @@
           }).sort((a, b) => b.effective_weight - a.effective_weight || a.target.localeCompare(b.target));
           const fundEdges = candidates.filter(edge => ["fund", "unresolved"].includes(byId.get(edge.target)?.type));
           const leafEdges = candidates.filter(edge => !["fund", "unresolved"].includes(byId.get(edge.target)?.type));
-          const kept = [...fundEdges, ...leafEdges.slice(0, Math.max(0, topN - fundEdges.length))];
+          const kept = showAllNodes
+            ? candidates
+            : [...fundEdges, ...leafEdges.slice(0, Math.max(0, topN - fundEdges.length))];
           candidates.filter(edge => forced.has(edge.target)).forEach(edge => {
             if (!kept.some(item => item.id === edge.id)) kept.push(edge);
           });
@@ -341,29 +360,41 @@
       }
 
       function layoutPositions() {
+        const full = raw.layouts.full?.positions || {};
+        if (showAllNodes) return full;
         if (drillRoot !== raw.root) {
-          return raw.layouts.drilldown?.[drillRoot]?.[String(topN)]?.positions || {};
+          return {...full, ...(raw.layouts.drilldown?.[drillRoot]?.[String(topN)]?.positions || {})};
         }
         const mode = [...expanded].some(id => id !== raw.root) ? "expanded" : "collapsed";
-        return raw.layouts.radial?.[String(topN)]?.[mode]?.positions || {};
+        return {...full, ...(raw.layouts.radial?.[String(topN)]?.[mode]?.positions || {})};
       }
 
       function render({fit = false} = {}) {
         const view = buildVisible();
         const positions = layoutPositions();
+        largeView = view.visibleNodes.size > 180;
         visibleMeta.clear();
         view.visibleNodes.forEach((node, id) => visibleMeta.set(id, node));
         const nodeItems = [...view.visibleNodes.values()].map(node =>
-          visNode(node, node.opened_fund && node.id !== drillRoot && !expanded.has(node.id), positions[node.id]));
+          visNode(
+            node,
+            node.opened_fund && node.id !== drillRoot && !expanded.has(node.id),
+            positions[node.id],
+            largeView,
+          ));
         const edgeItems = [...view.visibleEdges.values()].map(edge => visEdge(edge, edge.id.includes("OTHER:")));
-        const labels = hierarchical ? {labelNodes: [], labelEdges: [], labelPositions: {}} : radialLabels(view, positions);
+        const labels = hierarchical || largeView
+          ? {labelNodes: [], labelEdges: [], labelPositions: {}}
+          : radialLabels(view, positions);
         nodeItems.push(...labels.labelNodes); edgeItems.push(...labels.labelEdges);
         activePositions = {...positions, ...labels.labelPositions};
-        nodes.clear(); edges.clear(); nodes.add(nodeItems); edges.add(edgeItems);
+        nodes = new vis.DataSet(nodeItems);
+        edges = new vis.DataSet(edgeItems);
+        if (network) network.setData({nodes, edges});
         renderBreadcrumb();
         if (network) {
           applyLayout(fit);
-          applyHighlight();
+          if (focusId || hoverId) applyHighlight();
         }
       }
 
@@ -372,18 +403,16 @@
         viewTouched = false;
         network.stopSimulation();
         if (hierarchical) {
-          nodes.update(nodes.get().map(node => ({id: node.id, fixed: false})));
           network.setOptions({layout: {hierarchical: {enabled: true, direction: "LR", sortMethod: "directed", levelSeparation: 210, nodeSpacing: 120, treeSpacing: 240}}, physics: false});
           if (fit) setTimeout(() => {
             if (run === layoutRun && !viewTouched) network.fit({animation: {duration: 350}});
           }, 80);
         } else {
           network.setOptions({layout: {hierarchical: {enabled: false}}, physics: false});
-          nodes.getIds().forEach(id => {
+          nodes.update(nodes.getIds().flatMap(id => {
             const position = activePositions[id];
-            if (position) network.moveNode(id, position.x, position.y);
-          });
-          nodes.update(nodes.get().map(node => ({id: node.id, fixed: false})));
+            return position ? [{id, x: position.x, y: position.y}] : [];
+          }));
           if (fit) setTimeout(() => {
             if (run === layoutRun && !viewTouched) network.fit({animation: {duration: 350}});
           }, 35);
@@ -425,6 +454,7 @@
 
       function applyHighlight() {
         const active = focusId || hoverId;
+        if (largeView && hoverId && !focusId) return;
         if (!active || !visibleMeta.has(active)) {
           nodes.update(nodes.get().map(node => ({id: node.id, opacity: 1})));
           edges.update(edges.get().map(edge => ({
@@ -539,9 +569,8 @@
         const top = raw.summary.unresolved_top.map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
         const exposureTop = (raw.lookthrough?.exposures || []).slice(0, 5)
           .map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
-        const warning = raw.summary.date_mismatch ? `<div class="warning">⚠ Rapor tarihleri farklı</div>` : "";
         document.getElementById("summary").innerHTML = `<strong>${esc(cleanId(raw.root))}</strong><br>` +
-          `Raporlar: ${reports}${warning}<br>Graf: ${raw.summary.node_count} düğüm / ${raw.summary.edge_count} kenar · ` +
+          `Raporlar: ${reports}<br>Graf: ${raw.summary.node_count} düğüm / ${raw.summary.edge_count} kenar · ` +
           `Kök toplamı: ${percent(raw.summary.root_total)} · Look-through coverage: ${percent(raw.lookthrough?.coverage)}<br>` +
           `En büyük etkin exposure: ${exposureTop}<br>Unresolved: ${percent(raw.summary.unresolved_total)} · ${top}` +
           ` · Cutoff: ${percent(raw.summary.cut_off_total)}`;
@@ -577,8 +606,7 @@
             <div class="metric">Cutoff<b>${result.cut_off.length}</b></div>
           </div>
           <p><b>Referans tarih:</b> ${esc(result.reference_date || "—")}</p>
-          <p><b>Rapor tarihleri:</b> ${dates}</p>
-          <p><b>En büyük tarih farkı:</b> ${result.max_date_gap_days ?? "—"} gün</p>
+          <p><b>Rapor dönemleri:</b> ${dates}</p>
           <p><b>Unresolved:</b> ${unresolved}</p>
           <p><b>Cutoff ile açılmayan:</b> ${cutOff}</p>
           <p><b>Cycle:</b><br>${cycles}</p>
@@ -611,7 +639,11 @@
       renderSummary();
       render();
       network = new vis.Network(document.getElementById("network"), {nodes, edges}, {
-        autoResize: true, interaction: {hover: true, navigationButtons: false, keyboard: true, zoomView: false, dragView: true},
+        autoResize: true,
+        interaction: {
+          hover: true, tooltipDelay: 140, navigationButtons: false, keyboard: true,
+          zoomView: false, dragView: true, hideEdgesOnDrag: true, hideEdgesOnZoom: true
+        },
         nodes: {chosen: false}, edges: {selectionWidth: 0, chosen: false}, physics: false
       });
       applyLayout(true);
@@ -629,14 +661,47 @@
       network.on("doubleClick", params => {
         const id = actualId(params.nodes[0]); const node = byId.get(id);
         if (!node?.opened_fund || id === drillRoot) return;
+        showAllNodes = false;
+        document.getElementById("topNValue").textContent = topN;
         expanded.has(id) ? expanded.delete(id) : expanded.add(id); render({fit: true});
       });
 
       document.getElementById("closeDetails").onclick = () => {
         focusId = null; network.unselectAll(); document.getElementById("details").classList.remove("open"); applyHighlight();
       };
-      document.getElementById("expandAll").onclick = () => {raw.nodes.filter(node => node.opened_fund).forEach(node => expanded.add(node.id)); render({fit: true});};
+      document.getElementById("expandAll").onclick = event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Fonlar açılıyor…";
+        requestAnimationFrame(() => {
+          showAllNodes = false;
+          document.getElementById("topNValue").textContent = topN;
+          raw.nodes.filter(node => node.opened_fund).forEach(node => expanded.add(node.id));
+          render({fit: true});
+          requestAnimationFrame(() => {
+            button.disabled = false;
+            button.textContent = "Fonları aç";
+          });
+        });
+      };
+      document.getElementById("showAllPositions").onclick = event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Hazırlanıyor…";
+        requestAnimationFrame(() => {
+          showAllNodes = true;
+          document.getElementById("topNValue").textContent = "Tümü";
+          raw.nodes.filter(node => node.opened_fund).forEach(node => expanded.add(node.id));
+          render({fit: true});
+          requestAnimationFrame(() => {
+            button.disabled = false;
+            button.textContent = "Tüm pozisyonlar";
+          });
+        });
+      };
       document.getElementById("collapseAll").onclick = () => {
+        showAllNodes = false;
+        document.getElementById("topNValue").textContent = topN;
         expanded.clear(); expanded.add(raw.root); expanded.add(drillRoot); forced.clear(); render({fit: true});
       };
       document.getElementById("layoutToggle").onclick = event => {
@@ -648,6 +713,7 @@
       document.getElementById("fitGraph").onclick = () => {viewTouched = false; network.fit({animation: {duration: 350}});};
       document.getElementById("network").addEventListener("wheel", wheelZoom, {passive: false, capture: true});
       document.getElementById("topN").oninput = event => {
+        showAllNodes = false;
         topN = Number(event.target.value); document.getElementById("topNValue").textContent = topN; forced.clear();
         clearTimeout(topTimer); topTimer = setTimeout(() => render({fit: true}), 120);
       };
