@@ -52,15 +52,28 @@ def test_slide8_effective_weights_and_cash_label() -> None:
     assert comparison["ISIN:TRAASELS91H2"]["after_weight"] == pytest.approx(0.5)
     assert comparison["ISIN:TRATUPRS91E8"]["before_weight"] == 0.0
     assert comparison["ISIN:TRATUPRS91E8"]["after_weight"] == pytest.approx(0.204)
+    analytics = data["analytics"]
+    assert analytics["matrix_comparison"]["matches"] is True
+    assert analytics["matrix_comparison"]["max_abs_difference"] <= 1e-9
+    assert analytics["hhi"][0]["fund"] == "FUND:FA"
+    assert any(
+        {row["first"], row["second"]} == {"FUND:FA", "FUND:FB"} for row in analytics["overlap"]
+    )
 
 
 def test_gtm_gal_effective_weights_match_expected_lookthrough() -> None:
     fixtures = [load_fixture("gtm_2026_09.json"), load_fixture("gal_2026_09.json")]
     expected = load_fixture("gtm_gal_2026_09_expected.json")["expected"]["lookthrough"]
-    effective = effective_by_id(prepare_graph_data(fixtures))
+    data = prepare_graph_data(fixtures)
+    effective = effective_by_id(data)
 
     for node_id, expected_weight in expected.items():
         assert effective[node_id] == pytest.approx(expected_weight)
+
+    expected_summary = load_fixture("gtm_gal_2026_09_expected.json")["expected"]
+    root_hhi = next(row for row in data["analytics"]["hhi"] if row["fund"] == "FUND:GTM")
+    assert root_hhi["reported"] == pytest.approx(expected_summary["hhi_reported"], abs=1e-10)
+    assert root_hhi["lookthrough"] == pytest.approx(expected_summary["hhi_lookthrough"], abs=1e-10)
 
 
 def test_radial_layout_keeps_subfund_leaves_in_its_slice() -> None:
