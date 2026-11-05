@@ -20,6 +20,7 @@ backend/            Python 3.12 (uv)
   tests/            pytest; fixtures/ ve recorded/ (kayıtlı LLM çıktıları)
   evaluations/      Gerçek LLM / piyasa verisi değerlendirmeleri (CI'da çalışmaz)
 frontend/           Next.js (TypeScript, Tailwind, App Router)
+docs/veri-sozlesmesi.md  Ortak veri sözleşmesi: alanlar, tablolar, yazma/okuma, API
 docs/decisions/     Karar notları
 docs/plans/         Sprint planları
 data/corpus.csv     Rapor listesi (KAP linki + SHA-256) — PDF'ler git'e girmez
@@ -44,6 +45,10 @@ docker compose up --build
   `cd backend && uv run alembic upgrade head && uv run uvicorn app.main:app --reload`
 - PDF yükleme: `curl -F "file=@rapor.pdf" http://localhost:8000/documents` — ilk yüklemede `201`,
   aynı içerik tekrar gelirse `200` ve mevcut kayıt döner (kimlik: dosyanın SHA-256'sı).
+- Okuma: `GET /documents` (sayfalı liste), `GET /documents/{id}`, `GET /documents/{id}/runs`
+  (çıkarım çalışmaları), `GET /documents/{id}/holdings` (varsayılan: en son run; `run_id`,
+  `only_ok`, `status` parametreleri, bkz. `docs/decisions/0008-extraction-run-secimi.md`).
+  Tüm uç noktalar: http://localhost:8000/docs
 
 ### Ayrı ayrı geliştirme
 

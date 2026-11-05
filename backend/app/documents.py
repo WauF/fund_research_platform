@@ -1,10 +1,10 @@
-"""PDF upload API. The SHA-256 of the file content is the identity of a document."""
+"""Document API: upload (SHA-256 de-duplication), listing and lookup."""
 
 import hashlib
 from datetime import datetime
 from typing import Annotated, BinaryIO
 
-from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,42 @@ class DocumentOut(BaseModel):
     size_bytes: int
     storage_key: str
     created_at: datetime
+
+
+class DocumentPage(BaseModel):
+    items: list[DocumentOut]
+    total: int
+    limit: int
+    offset: int
+
+
+@router.get("")
+def list_documents(
+    session: Annotated[Session, Depends(get_session)],
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> DocumentPage:
+    """Uploaded documents, newest first."""
+    items, total = documents.list_documents(session, limit=limit, offset=offset)
+    return DocumentPage(
+        items=[DocumentOut.model_validate(d) for d in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get(
+    "/{document_id}",
+    responses={status.HTTP_404_NOT_FOUND: {"description": "No such document"}},
+)
+def get_document(
+    document_id: int, session: Annotated[Session, Depends(get_session)]
+) -> DocumentOut:
+    document = documents.get_document(session, document_id)
+    if document is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"document {document_id} not found")
+    return DocumentOut.model_validate(document)
 
 
 def hash_pdf(stream: BinaryIO, max_bytes: int) -> tuple[str, int]:

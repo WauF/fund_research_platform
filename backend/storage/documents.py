@@ -1,6 +1,6 @@
 """Repository functions for the documents table."""
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -9,6 +9,19 @@ from storage.models import Document
 
 def get_by_sha256(session: Session, sha256: str) -> Document | None:
     return session.scalars(select(Document).where(Document.sha256 == sha256)).one_or_none()
+
+
+def get_document(session: Session, document_id: int) -> Document | None:
+    return session.get(Document, document_id)
+
+
+def list_documents(session: Session, *, limit: int, offset: int = 0) -> tuple[list[Document], int]:
+    """A page of documents, newest first, and the total count."""
+    total = session.scalar(select(func.count()).select_from(Document)) or 0
+    page = session.scalars(
+        select(Document).order_by(Document.id.desc()).limit(limit).offset(offset)
+    )
+    return list(page), total
 
 
 def add_document(
