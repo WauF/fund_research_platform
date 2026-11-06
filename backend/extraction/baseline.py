@@ -112,6 +112,8 @@ class BaselineResult:
     holdings: list[Holding]
     summary: ReportSummary | None
     warnings: list[str] = field(default_factory=list)
+    # row_no -> FTD weight as printed (None where the report leaves the column empty)
+    printed_total_weights: dict[int, Decimal | None] = field(default_factory=dict)
 
 
 @dataclass
@@ -249,22 +251,29 @@ def _rows(pages: list[str], title: str) -> tuple[list[_Row], Decimal | None]:
     return rows, portfolio_total
 
 
-def _read_numbers(row: _Row, portfolio_value: Decimal | None) -> tuple[Decimal, Decimal]:
-    """(value, FPD weight as a fraction). Chooses the reading in which value / FPD matches."""
+def _read_numbers(
+    row: _Row, portfolio_value: Decimal | None
+) -> tuple[Decimal, Decimal, Decimal | None]:
+    """(value, FPD weight, FTD weight or None), weights as fractions.
+
+    Chooses the reading in which value / FPD matches; the FTD column is not always printed.
+    """
     n = row.nums
-    readings = []
+    readings: list[tuple[Decimal, Decimal, Decimal, Decimal | None]] = []
     if len(n) >= 4:
-        readings.append((n[-4], n[-3], n[-2]))  # value, group %, FPD %, FTD %
-    readings.append((n[-3], n[-2], n[-1]))  # value, group %, FPD %   (no FTD column)
+        readings.append((n[-4], n[-3], n[-2], n[-1]))  # value, group %, FPD %, FTD %
+    readings.append((n[-3], n[-2], n[-1], None))  # value, group %, FPD %   (no FTD column)
     readings = [r for r in readings if r[1] <= 100 and r[2] <= 100]
     if not readings:
         raise ValueError(f"no plausible reading of {row.line!r}")
+    chosen = readings[0]  # derivatives and currency rows: no reading matches, take the first
     if portfolio_value:
-        for value, _group, fpd in readings:
-            if abs(value / portfolio_value * 100 - fpd) <= _WEIGHT_SLACK:
-                return value, fpd / 100
-    value, _group, fpd = readings[0]  # derivatives: notional value, 0 weight
-    return value, fpd / 100
+        for reading in readings:
+            if abs(reading[0] / portfolio_value * 100 - reading[2]) <= _WEIGHT_SLACK:
+                chosen = reading
+                break
+    value, _group, fpd, ftd = chosen
+    return value, fpd / 100, None if ftd is None else ftd / 100
 
 
 def _find_isin(row: _Row) -> str | None:
@@ -313,6 +322,7 @@ def parse_report(
     portfolio_value = summary.portfolio_value if summary else printed_total
 
     holdings: list[Holding] = []
+    printed_total: dict[int, Decimal | None] = {}
     for row_no, row in enumerate(rows, 1):
         prefix = row.line
         tokens = row.line.split()
@@ -323,7 +333,7 @@ def parse_report(
         isin = _find_isin(row)
         held_fund_code = _held_fund_code(prefix, row.asset_type)
         try:
-            value, weight = _read_numbers(row, portfolio_value)
+            value, weight, total_weight = _read_numbers(row, portfolio_value)
             holdings.append(
                 Holding(
                     fund_code=meta.fund_code,
@@ -345,8 +355,30 @@ def parse_report(
                     weight_basis=WeightBasis.PORTFOLIO,
                 )
             )
+            printed_total[row_no] = total_weight
         except (ValueError, ValidationError) as exc:
             warnings.append(f"row {row_no} on page {row.page} skipped: {exc}")
     if summary is None:
         warnings.append("section IV (fund total value) not found")
-    return BaselineResult(meta, holdings, summary, warnings)
+    return BaselineResult(meta, holdings, summary, warnings, printed_total)
+
+
+def to_total_basis(result: BaselineResult) -> list[Holding]:
+    """The holdings with weights of the fund total value (FTD) instead of the portfolio (FPD).
+
+    Look-through needs FTD: a parent owns a share of the child fund's total value, not of its
+    portfolio (IRF: FPD is 87.97% of FTD). Uses the printed FTD column; where the report leaves it
+    empty (e.g. VİOP collateral), value / total value. Validate on the FPD records first
+    (extraction.validation): currency rows with 0 FPD weight carry an FTD weight, so the FTD
+    weights no longer add up to FPD / FTD. Without a summary the records are returned unchanged.
+    """
+    if result.summary is None:
+        return list(result.holdings)
+    total_value = result.summary.total_value
+    converted = []
+    for h in result.holdings:
+        weight = result.printed_total_weights.get(h.row_no)
+        if weight is None:
+            weight = (h.value / total_value).quantize(Decimal("0.0001"))
+        converted.append(h.model_copy(update={"weight": weight, "weight_basis": WeightBasis.TOTAL}))
+    return converted
