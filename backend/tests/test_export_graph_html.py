@@ -6,6 +6,7 @@ import pytest
 
 from evaluations.export_graph_html import (
     _node_effective_weights,
+    _short_name,
     calculate_full_radial_layout,
     calculate_radial_layout,
     prepare_graph_data,
@@ -59,6 +60,20 @@ def test_slide8_effective_weights_and_cash_label() -> None:
     assert any(
         {row["first"], row["second"]} == {"FUND:FA", "FUND:FB"} for row in analytics["overlap"]
     )
+
+
+def test_foreign_currency_cash_has_explicit_label() -> None:
+    assert _short_name("CASH:USD", [], "cash") == "Nakit / mevduat (USD)"
+
+
+def test_cycle_is_reported_without_zeroing_html_weights() -> None:
+    data = prepare_graph_data([load_fixture("cycle.json")])
+    effective = effective_by_id(data)
+
+    assert data["lookthrough"]["cycles"] == [["FUND:FB", "FUND:FC", "FUND:FB"]]
+    assert data["analytics"]["matrix_comparison"]["matches"] is True
+    assert effective["FUND:FB"] == pytest.approx(0.626262626262626, abs=1e-9)
+    assert effective["ISIN:TRAASELS91H2"] == pytest.approx(0.501010101010101, abs=1e-9)
 
 
 def test_gtm_gal_effective_weights_match_expected_lookthrough() -> None:

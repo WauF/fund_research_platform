@@ -32,6 +32,8 @@ from schemas.holding import Holding  # noqa: E402
 
 R1 = 350.0
 R2 = 750.0
+PATH_FLOOR = 1e-12
+MAX_PATH_STEPS = 1_000_000
 
 
 def _edge_contribution(
@@ -50,7 +52,7 @@ def _visible_targets(
     """Fon hedeflerini daima, toplam hedef sayısını mümkünse N ile sınırla."""
     targets = sorted(
         graph.successors(source),
-        key=lambda target: (-_edge_contribution(source, target, graph, effective), target),
+        key=lambda target: (-abs(_edge_contribution(source, target, graph, effective)), target),
     )
     funds = [target for target in targets if graph.nodes[target].get("kind") == "fund"]
     leaves = [target for target in targets if graph.nodes[target].get("kind") != "fund"]
@@ -251,14 +253,22 @@ def load_fixture(path: Path) -> dict[str, Any]:
 
 
 def _node_effective_weights(graph: nx.DiGraph, root: str) -> dict[str, float]:
-    """Ara fonların görsel boyutu için ağırlıkları topolojik sırada ileri taşı."""
+    """Ara fonların görsel boyutu için bütün yakınsayan yolların ağırlıklarını ileri taşı."""
     weights: defaultdict[str, float] = defaultdict(float)
-    weights[root] = 1.0
-    if not nx.is_directed_acyclic_graph(graph):
-        return dict(weights)
-    for source in nx.topological_sort(graph):
+    stack = [(root, 1.0)]
+    steps = 0
+    while stack:
+        source, contribution = stack.pop()
+        weights[source] += contribution
         for _, target, edge_data in graph.out_edges(source, data=True):
-            weights[target] += weights[source] * float(edge_data.get("weight", 0.0))
+            next_contribution = contribution * float(edge_data.get("weight", 0.0))
+            if abs(next_contribution) >= PATH_FLOOR:
+                stack.append((target, next_contribution))
+        steps += 1
+        if steps > MAX_PATH_STEPS:
+            raise ValueError(
+                "Görsel ağırlık yolları yakınsamıyor; cycle ağırlıklarını kontrol edin"
+            )
     return dict(weights)
 
 
@@ -272,8 +282,9 @@ def _short_name(node: str, rows: list[dict[str, Any]], kind: str) -> str:
     """Düğüm türüne göre kısa ve kararlı bir kullanıcı etiketi üret."""
     if node.startswith("FUND:"):
         return node.removeprefix("FUND:")
-    if node == "CASH:TRY":
-        return "Mevduat (tüm bankalar)"
+    if node.startswith("CASH:"):
+        currency = node.removeprefix("CASH:")
+        return "Mevduat (tüm bankalar)" if currency == "TRY" else f"Nakit / mevduat ({currency})"
     if kind == "bond" and node.startswith("ISIN:"):
         return node.removeprefix("ISIN:")
     names = {str(row.get("name", "")).strip() for row in rows if row.get("name")}
@@ -297,7 +308,7 @@ def _node_type(
         return "equity"
     if "bond" in asset_types:
         return "bond"
-    if asset_types & {"cash", "deposit"} or node == "CASH:TRY":
+    if asset_types & {"cash", "deposit"} or node.startswith("CASH:"):
         return "cash"
     return "other"
 

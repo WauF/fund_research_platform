@@ -167,7 +167,7 @@
       let nodes = new vis.DataSet();
       let edges = new vis.DataSet();
       const visibleMeta = new Map();
-      const maxEdgeContribution = Math.max(...raw.edges.map(edge => edge.effective_weight || 0), 1e-8);
+      const maxEdgeContribution = Math.max(...raw.edges.map(edge => Math.abs(edge.effective_weight || 0)), 1e-8);
       const palette = {
         root: "#102a43", fund: "#8cc8e8", unresolved: "#d64545",
         equity: "#5bae75", bond: "#8b6bbd", cash: "#a7adb4", other: "#a7adb4"
@@ -227,7 +227,7 @@
           ? `${node.label}\n${node.id === raw.root ? "KÖK FON" : "ODAK FON"}`
           : ((hierarchical || (inlineFundLabel && isFund)) ? nodeLabel(node, collapsed) : "");
         const fill = isViewRoot ? "#0b3a63" : (palette[node.type] || palette.other);
-        const size = isViewRoot ? 56 : Math.min(55, Math.max(5, 70 * Math.sqrt(Math.max(node.effective_weight || 0, 0))));
+        const size = isViewRoot ? 56 : Math.min(55, Math.max(5, 70 * Math.sqrt(Math.abs(node.effective_weight || 0))));
         const border = isViewRoot ? "#f5b841" : (shared ? "#f28c28" : (unresolved ? "#8b1e1e" : "#243b53"));
         return {
           id: node.id, label, title: tooltip(node), size,
@@ -304,7 +304,7 @@
       function visEdge(edge, synthetic = false) {
         const fromRoot = edge.source === raw.root;
         const color = fromRoot ? "#315b7d" : "#8cc8e8";
-        const width = .6 + 9 * Math.sqrt(Math.max(edge.effective_weight || 0, 0) / maxEdgeContribution);
+        const width = .6 + 9 * Math.sqrt(Math.abs(edge.effective_weight || 0) / maxEdgeContribution);
         return {
           id: edge.id, from: edge.source, to: edge.target,
           width, _baseWidth: width, _baseColor: color,
@@ -329,7 +329,7 @@
           let candidates = (outgoing.get(source) || []).filter(edge => {
             const target = byId.get(edge.target);
             return showUnresolved || target?.type !== "unresolved";
-          }).sort((a, b) => b.effective_weight - a.effective_weight || a.target.localeCompare(b.target));
+          }).sort((a, b) => Math.abs(b.effective_weight) - Math.abs(a.effective_weight) || a.target.localeCompare(b.target));
           const fundEdges = candidates.filter(edge => ["fund", "unresolved"].includes(byId.get(edge.target)?.type));
           const leafEdges = candidates.filter(edge => !["fund", "unresolved"].includes(byId.get(edge.target)?.type));
           const kept = showAllNodes
@@ -543,7 +543,7 @@
         const change = comparison?.change ?? (afterWeight - beforeWeight);
         let children = "";
         if (node.opened_fund || node.id === raw.root) {
-          const rows = (outgoing.get(node.id) || []).slice().sort((a, b) => b.effective_weight - a.effective_weight).slice(0, 10)
+          const rows = (outgoing.get(node.id) || []).slice().sort((a, b) => Math.abs(b.effective_weight) - Math.abs(a.effective_weight)).slice(0, 10)
             .map(edge => {
               const child = byId.get(edge.target);
               return `<tr><td>${esc(child?.label || cleanId(edge.target))}</td><td>${percent(edge.weight)}</td></tr>`;

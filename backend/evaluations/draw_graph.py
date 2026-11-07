@@ -23,6 +23,9 @@ from evaluations.pdf_fixture import load_pdf_fixture  # noqa: E402
 from exposure.graph import build_graph, node_key  # noqa: E402
 from schemas.holding import Holding  # noqa: E402
 
+PATH_FLOOR = 1e-12
+MAX_PATH_STEPS = 1_000_000
+
 
 def parse_args() -> argparse.Namespace:
     """Fixture yollarını ve isteğe bağlı hedef sınırını komut satırından al."""
@@ -125,15 +128,20 @@ def bfs_levels(graph: nx.DiGraph, root: str) -> dict[str, int]:
 
 
 def node_exposures(graph: nx.DiGraph, root: str, levels: dict[str, int]) -> dict[str, float]:
-    """Kök ağırlığını tüm ileri yollar boyunca taşıyarak etkin maruziyetleri hesapla."""
+    """Kök ağırlığını yakınsayan döngüler dahil bütün yollar boyunca taşı."""
     exposures: defaultdict[str, float] = defaultdict(float)
-    exposures[root] = 1.0
-    is_acyclic = nx.is_directed_acyclic_graph(graph)
-    order = list(nx.topological_sort(graph)) if is_acyclic else sorted(levels, key=levels.get)
-    for source in order:
+    stack = [(root, 1.0)]
+    steps = 0
+    while stack:
+        source, contribution = stack.pop()
+        exposures[source] += contribution
         for _, target, edge_data in graph.out_edges(source, data=True):
-            if is_acyclic or levels.get(target, 0) > levels.get(source, 0):
-                exposures[target] += exposures[source] * float(edge_data.get("weight", 0.0))
+            next_contribution = contribution * float(edge_data.get("weight", 0.0))
+            if abs(next_contribution) >= PATH_FLOOR:
+                stack.append((target, next_contribution))
+        steps += 1
+        if steps > MAX_PATH_STEPS:
+            raise ValueError("Çizim yolları yakınsamıyor; cycle ağırlıklarını kontrol edin")
     return dict(exposures)
 
 
@@ -150,7 +158,7 @@ def ring_layout(
     child_groups: dict[str, list[str]] = {}
     direct_targets = sorted(
         graph.successors(root),
-        key=lambda node: float(graph[root][node].get("weight", 0.0)),
+        key=lambda node: abs(float(graph[root][node].get("weight", 0.0))),
         reverse=True,
     )
     for index, node in enumerate(direct_targets):
@@ -293,8 +301,9 @@ def display_name(
     """Düğüm türü ve bütün kaynak adlarını kullanarak yanıltıcı olmayan kısa adı seç."""
     if node == root or node.startswith("FUND:"):
         return node.removeprefix("FUND:")
-    if node == "CASH:TRY":
-        return "Mevduat (tüm bankalar)"
+    if node.startswith("CASH:"):
+        currency = node.removeprefix("CASH:")
+        return "Mevduat (tüm bankalar)" if currency == "TRY" else f"Nakit / mevduat ({currency})"
     if node.startswith("NAME:DİĞER:"):
         return str(graph.nodes[node]["label"])
 
@@ -474,15 +483,19 @@ def draw_fixtures(
     exposures = node_exposures(graph, root, levels)
     positions, label_positions = ring_layout(graph, root, levels, exposures)
 
-    non_root = [weight for node, weight in exposures.items() if node != root]
+    non_root = [abs(weight) for node, weight in exposures.items() if node != root]
     largest_exposure = max(non_root, default=1.0)
     sizes = {
-        node: 2800 if node == root else max(300, 4200 * exposures.get(node, 0.0) / largest_exposure)
+        node: (
+            2800
+            if node == root
+            else max(300, 4200 * abs(exposures.get(node, 0.0)) / largest_exposure)
+        )
         for node in graph
     }
     root_edges = list(graph.out_edges(root))
     root_weights = [
-        float(graph[source][target].get("weight", 0.0)) for source, target in root_edges
+        abs(float(graph[source][target].get("weight", 0.0))) for source, target in root_edges
     ]
     largest_root_edge = max(root_weights, default=1.0)
     root_widths = [0.8 + 7.0 * weight / largest_root_edge for weight in root_weights]
@@ -491,8 +504,7 @@ def draw_fixtures(
         0.35
         + 2.0
         * (
-            exposures.get(source, 0.0)
-            * float(graph[source][target].get("weight", 0.0))
+            abs(exposures.get(source, 0.0) * float(graph[source][target].get("weight", 0.0)))
             / largest_root_edge
         )
         for source, target in fund_edges
