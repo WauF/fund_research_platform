@@ -50,11 +50,20 @@ def test_matrix_matches_real_gtm_gal_expected_values() -> None:
     )
 
 
-def test_matrix_rejects_cycles() -> None:
+def test_matrix_solves_convergent_cycles_and_matches_recursive() -> None:
     cycle = load_fixture("cycle.json")
+    graph = graph_from(cycle)
 
-    with pytest.raises(ValueError, match="Döngülü"):
-        matrix_look_through(graph_from(cycle), "FUND:FA")
+    matrix = matrix_look_through(graph, "FUND:FA")
+    recursive = look_through(graph, "FUND:FA", cutoff=0).exposures
+
+    assert matrix == pytest.approx(recursive, abs=1e-9)
+    assert matrix == pytest.approx(
+        {
+            "ISIN:TRAASELS91H2": 0.501010101010101,
+            "NAME:TR DEVLET TAHVILI": 0.498989898989899,
+        }
+    )
 
 
 def test_hhi_matches_real_fixture_before_and_after_lookthrough() -> None:

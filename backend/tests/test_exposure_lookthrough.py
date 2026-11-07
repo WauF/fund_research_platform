@@ -70,14 +70,20 @@ def test_small_fixtures_match_expected(fixture_name: str) -> None:
     assert result.total == pytest.approx(fixture["expected"]["total"])
 
 
-def test_cycle_stops_before_recursion() -> None:
+def test_cycle_is_reported_and_converges() -> None:
     fixture = load_fixture("cycle.json")
-    result = look_through(graph_from(fixture), f"FUND:{fixture['root']}")
+    result = look_through(graph_from(fixture), f"FUND:{fixture['root']}", cutoff=0)
 
     assert result.cycles == fixture["expected_cycles"]
-    assert result.exposures == {}
-    assert result.contributions == {}
-    assert result.total == 0.0
+    assert result.exposures == pytest.approx(
+        {
+            "ISIN:TRAASELS91H2": 0.501010101010101,
+            "NAME:TR DEVLET TAHVILI": 0.498989898989899,
+        },
+        abs=1e-10,
+    )
+    assert result.total == pytest.approx(1.0, abs=1e-10)
+    assert result.coverage == pytest.approx(1.0)
 
 
 def test_gtm_gal_real_data_matches_expected() -> None:
@@ -196,6 +202,48 @@ def test_negative_cutoff_is_rejected() -> None:
     fixture = load_fixture("slide8.json")
     with pytest.raises(ValueError, match="cutoff"):
         look_through(graph_from(fixture), "FUND:FA", cutoff=-0.1)
+
+
+def test_cutoff_uses_absolute_path_weight_for_short_fund() -> None:
+    holdings = [
+        Holding(
+            fund_code="FA",
+            period_start=date(2026, 9, 1),
+            period_end=date(2026, 9, 30),
+            report_kind=ReportKind.MONTHLY,
+            page=1,
+            quote="FA short FB",
+            extraction_run_id="2f1d7c9e-5b1a-4c3e-9f0a-3b6d2e8c1a47",
+            row_no=1,
+            name="Fund B",
+            asset_type=AssetType.FUND,
+            held_fund_code="FB",
+            value=Decimal("-10"),
+            weight=Decimal("-0.10"),
+            weight_basis=WeightBasis.PORTFOLIO,
+        ),
+        Holding(
+            fund_code="FB",
+            period_start=date(2026, 9, 1),
+            period_end=date(2026, 9, 30),
+            report_kind=ReportKind.MONTHLY,
+            page=1,
+            quote="FB cash",
+            extraction_run_id="d679199e-02b5-5d6a-85c9-d0f19ece6716",
+            row_no=1,
+            name="TL Mevduat",
+            asset_type=AssetType.CASH,
+            value=Decimal("10"),
+            weight=Decimal("1"),
+            weight_basis=WeightBasis.PORTFOLIO,
+        ),
+    ]
+
+    result = look_through(build_graph(holdings), "FUND:FA", cutoff=0.05)
+
+    assert result.exposures == pytest.approx({"CASH:TRY": -0.10})
+    assert result.cut_off == {}
+    assert result.coverage == pytest.approx(1.0)
 
 
 def test_irf_if_fixture_exists() -> None:

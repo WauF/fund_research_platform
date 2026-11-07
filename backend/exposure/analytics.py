@@ -9,7 +9,6 @@ from math import isfinite
 import networkx as nx
 import numpy as np
 
-from exposure.cycles import find_cycles
 from exposure.lookthrough import look_through
 
 
@@ -65,10 +64,6 @@ def matrix_look_through(graph: nx.DiGraph, root: str) -> dict[str, float]:
     """
     if root not in graph:
         raise ValueError(f"Kök düğüm grafta bulunamadı: {root}")
-    cycles = find_cycles(graph)
-    if cycles:
-        raise ValueError("Döngülü grafta matris look-through hesaplanamaz")
-
     reachable = {root, *nx.descendants(graph, root)}
     resolved_funds = sorted(
         node
@@ -105,7 +100,10 @@ def matrix_look_through(graph: nx.DiGraph, root: str) -> dict[str, float]:
 
     root_vector = np.zeros(len(resolved_funds), dtype=np.float64)
     root_vector[fund_index[root]] = 1.0
-    fund_visits = np.linalg.solve(np.eye(len(resolved_funds)) - fund_matrix.T, root_vector)
+    try:
+        fund_visits = np.linalg.solve(np.eye(len(resolved_funds)) - fund_matrix.T, root_vector)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError("Fon döngüsü tekil; matris look-through çözülemiyor") from exc
     exposures = fund_visits @ leaf_matrix
     return {
         leaf: float(weight)

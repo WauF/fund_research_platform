@@ -11,6 +11,8 @@ import networkx as nx
 from exposure.cycles import find_cycles
 
 PathContribution = tuple[list[str], float]
+CYCLIC_PATH_FLOOR = 1e-12
+MAX_PATH_STEPS = 1_000_000
 
 
 @dataclass
@@ -68,63 +70,69 @@ def look_through(
         raise ValueError("cutoff negatif olamaz")
 
     report_dates, reference_date, max_date_gap_days = _report_dates(graph, root)
-    cycles = find_cycles(graph)
-    if cycles:  # Döngülü grafta sonlu ve anlamlı bir look-through sonucu üretme.
-        return LookThroughResult(
-            root=root,
-            exposures={},
-            contributions={},
-            unresolved={},
-            cut_off={},
-            coverage=0.0,
-            report_dates=report_dates,
-            reference_date=reference_date,
-            max_date_gap_days=max_date_gap_days,
-            cycles=cycles,
-            total=0.0,
-        )
+    reachable = {root, *nx.descendants(graph, root)}
+    cycles = find_cycles(graph.subgraph(reachable))
 
     exposures: defaultdict[str, float] = defaultdict(float)
     paths: defaultdict[str, list[PathContribution]] = defaultdict(list)
     unresolved: defaultdict[str, float] = defaultdict(float)
     cut_off: defaultdict[str, float] = defaultdict(float)
 
-    def solve(node: str, path_weight: float, path: list[str]) -> None:
-        """Mutlak yol ağırlığını yaprağa taşı; küçük fon yollarını görünür biçimde kes."""
+    def record(leaf: str, path: list[str], path_weight: float) -> None:
+        """Exposure toplamını güncelle ve yalnız en büyük açıklama yollarını bellekte tut."""
+        exposures[leaf] += path_weight
+        paths[leaf].append((path, path_weight))
+        if len(paths[leaf]) > top_k_paths * 4:
+            paths[leaf].sort(key=lambda item: (-abs(item[1]), -item[1], tuple(item[0])))
+            del paths[leaf][top_k_paths * 2 :]
+
+    def visit(node: str, path_weight: float, path: list[str]) -> list[tuple[str, float, list[str]]]:
+        """Bir yol adımını çöz ve sıradaki fon/varlık adımlarını döndür."""
         data = graph.nodes[node]
+        if cycles and len(path) > 1 and abs(path_weight) < CYCLIC_PATH_FLOOR:
+            return []  # Cutoff sıfırken bile yakınsayan döngünün sayısal kuyruğunu sonlandır.
         if data.get("kind") == "fund" and data.get("unresolved"):
             leaf = f"UNRESOLVED:{node}"  # Raporu olmayan fon hesapta görünür bir yapraktır.
-            exposures[leaf] += path_weight
-            paths[leaf].append((path, path_weight))
+            record(leaf, path, path_weight)
             unresolved[node] += path_weight
-            return
-        if node != root and data.get("kind") == "fund" and path_weight < cutoff:
+            return []
+        if node != root and data.get("kind") == "fund" and abs(path_weight) < cutoff:
             leaf = f"UNRESOLVED:{node}"  # Eşik altındaki fon kaybolmaz, ayrı kalite alanına gider.
-            exposures[leaf] += path_weight
-            paths[leaf].append((path, path_weight))
+            record(leaf, path, path_weight)
             cut_off[node] += path_weight
-            return
+            return []
         if graph.out_degree(node) == 0:
-            exposures[node] += path_weight
-            paths[node].append((path, path_weight))
-            return
+            record(node, path, path_weight)
+            return []
 
-        for _, child, edge_data in sorted(
-            graph.out_edges(node, data=True), key=lambda edge: edge[1]
-        ):
+        following = []
+        for _, child, edge_data in sorted(graph.out_edges(node, data=True), reverse=True):
             edge_weight = float(edge_data.get("weight", 0.0))
-            solve(child, path_weight * edge_weight, [*path, child])
+            following.append((child, path_weight * edge_weight, [*path, child]))
+        return following
 
-    solve(root, 1.0, [root])
+    stack = [(root, 1.0, [root])]
+    steps = 0
+    while stack:
+        node, path_weight, path = stack.pop()
+        stack.extend(visit(node, path_weight, path))
+        steps += 1
+        if steps > MAX_PATH_STEPS:
+            raise ValueError("Look-through yolları yakınsamıyor; cycle ağırlıklarını kontrol edin")
+
     ordered_exposures = {leaf: exposures[leaf] for leaf in sorted(exposures)}
     contributions = {
-        leaf: sorted(paths[leaf], key=lambda item: (-item[1], tuple(item[0])))[:top_k_paths]
+        leaf: sorted(paths[leaf], key=lambda item: (-abs(item[1]), -item[1], tuple(item[0])))[
+            :top_k_paths
+        ]
         for leaf in sorted(paths)
     }
     total = sum(ordered_exposures.values())
-    unresolved_total = sum(unresolved.values())
-    cut_off_total = sum(cut_off.values())
-    coverage = 1.0 - (unresolved_total + cut_off_total) / total if total else 0.0
+    gross_total = sum(abs(weight) for weight in ordered_exposures.values())
+    unavailable_total = sum(abs(weight) for weight in unresolved.values()) + sum(
+        abs(weight) for weight in cut_off.values()
+    )
+    coverage = 1.0 - unavailable_total / gross_total if gross_total else 0.0
     return LookThroughResult(
         root=root,
         exposures=ordered_exposures,
@@ -135,6 +143,6 @@ def look_through(
         report_dates=report_dates,
         reference_date=reference_date,
         max_date_gap_days=max_date_gap_days,
-        cycles=[],
+        cycles=cycles,
         total=total,
     )
