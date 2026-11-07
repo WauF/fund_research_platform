@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exposure Grafı</title>
+  <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --navy: #102a43;
+      --blue: #8cc8e8;
+      --red: #d64545;
+      --green: #5bae75;
+      --purple: #8b6bbd;
+      --gray: #a7adb4;
+      --orange: #f28c28;
+      --ink: #102a43;
+      --paper: #f7f9fc;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--paper); color: var(--ink); }
+    button, input { font: inherit; }
+    #app { position: relative; width: 100%; height: 100%; }
+    #network { position: absolute; inset: 0; background: var(--paper); }
+    .topbar {
+      position: fixed; z-index: 20; left: 12px; right: 12px; top: 10px;
+      display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+      padding: 9px 11px; border: 1px solid #d7e0ea; border-radius: 12px;
+      background: rgba(255,255,255,.94); box-shadow: 0 5px 20px rgba(16,42,67,.10);
+      backdrop-filter: blur(8px);
+    }
+    .topbar button, .topbar input[type="search"] {
+      height: 34px; border: 1px solid #bcccdc; border-radius: 8px; background: #fff; color: var(--ink);
+    }
+    .topbar button { padding: 0 11px; cursor: pointer; font-weight: 650; }
+    .topbar button:hover { border-color: #627d98; background: #eef4f8; }
+    .zoom-controls { display: inline-flex; gap: 4px; }
+    .zoom-controls button { min-width: 36px; padding: 0 8px; font-size: 17px; }
+    .zoom-controls #fitGraph { min-width: 58px; font-size: 13px; }
+    #search { min-width: 245px; padding: 0 10px; }
+    .range-wrap, .check-wrap { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; font-size: 13px; }
+    #topN { width: 120px; }
+    #topNValue { min-width: 22px; font-weight: 750; }
+    .summary {
+      position: fixed; z-index: 15; top: 72px; left: 12px; width: min(500px, calc(100vw - 24px));
+      padding: 11px 13px; border: 1px solid #d7e0ea; border-radius: 11px;
+      background: rgba(255,255,255,.92); box-shadow: 0 4px 16px rgba(16,42,67,.08);
+      font-size: 12.5px; line-height: 1.45; pointer-events: none;
+    }
+    .summary strong { font-size: 15px; }
+    .details {
+      position: fixed; z-index: 18; top: 72px; right: 12px; bottom: 12px; width: 360px;
+      overflow: auto; padding: 14px; border: 1px solid #d7e0ea; border-radius: 11px;
+      background: rgba(255,255,255,.97); box-shadow: 0 6px 24px rgba(16,42,67,.14);
+      transform: translateX(calc(100% + 24px)); transition: transform .18s ease;
+    }
+    .details.open { transform: translateX(0); }
+    .details h2 { margin: 0 28px 10px 0; font-size: 18px; }
+    .details h3 { margin: 16px 0 7px; font-size: 14px; }
+    .details p { margin: 6px 0; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+    .details .quote { padding: 9px; border-radius: 8px; background: #eef4f8; white-space: pre-wrap; }
+    .metric-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 10px 0; }
+    .metric { padding: 8px; border-radius: 8px; background: #eef4f8; }
+    .metric b { display: block; font-size: 16px; }
+    .close { position: absolute; right: 9px; top: 8px; border: 0; background: transparent; font-size: 24px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 6px 4px; border-bottom: 1px solid #e6edf3; text-align: left; }
+    th:last-child, td:last-child { text-align: right; }
+    .comparison-table th:not(:first-child), .comparison-table td:not(:first-child) { text-align: right; white-space: nowrap; }
+    .explanation { padding: 9px 10px; border-left: 4px solid #8cc8e8; border-radius: 6px; background: #eef4f8; }
+    .status-ok { color: #287d46; font-weight: 750; }
+    .status-error { color: #b42318; font-weight: 750; }
+    .table-scroll { overflow-x: auto; }
+    .legend {
+      position: fixed; z-index: 14; right: 14px; bottom: 14px; padding: 9px 11px;
+      border: 1px solid #d7e0ea; border-radius: 9px; background: rgba(255,255,255,.93);
+      font-size: 12px; line-height: 1.7; box-shadow: 0 3px 12px rgba(16,42,67,.08);
+    }
+    .details.open + .legend { display: none; }
+    .swatch { display: inline-block; width: 13px; height: 13px; margin-right: 7px; vertical-align: -2px; border: 2px solid #243b53; border-radius: 50%; }
+    .swatch.shared { background: #fff; border: 3px solid var(--orange); }
+    .hint { opacity: .72; font-size: 12px; margin-left: auto; }
+    .breadcrumb { display: inline-flex; align-items: center; gap: 6px; font-weight: 750; }
+    .breadcrumb button { height: 28px; padding: 0 7px; border: 0; background: transparent; color: #315b7d; }
+    .drill-button { width: 100%; margin-top: 10px; padding: 8px; border: 1px solid #9fb3c8; border-radius: 8px; background: #eef4f8; cursor: pointer; font-weight: 700; }
+    @media (max-width: 760px) {
+      .topbar { left: 6px; right: 6px; top: 5px; gap: 6px; max-height: 132px; overflow: auto; }
+      #search { min-width: 160px; flex: 1 1 180px; }
+      .hint { display: none; }
+      .summary { top: 140px; left: 6px; width: calc(100vw - 12px); max-height: 115px; overflow: auto; }
+      .details { left: 6px; right: 6px; top: auto; bottom: 6px; width: auto; height: 42vh; transform: translateY(calc(100% + 18px)); }
+      .details.open { transform: translateY(0); }
+      .legend { right: 7px; bottom: 7px; font-size: 11px; }
+      .range-wrap { flex: 1 1 200px; }
+      #topN { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="network" aria-label="Etkileşimli exposure grafı"></div>
+    <div class="topbar">
+      <input id="search" type="search" placeholder="Ad, ISIN veya fon kodu ara…">
+      <button id="expandAll" type="button">Fonları aç</button>
+      <button id="collapseAll" type="button">Fonları kapat</button>
+      <button id="showAllPositions" type="button">Tüm pozisyonlar</button>
+      <button id="layoutToggle" type="button">Hiyerarşik</button>
+      <button id="lookthroughResults" type="button">Look-through ve analiz</button>
+      <span class="zoom-controls">
+        <button id="zoomOut" type="button" title="Uzaklaştır">−</button>
+        <button id="zoomIn" type="button" title="Yakınlaştır">+</button>
+        <button id="fitGraph" type="button" title="Grafı ekrana sığdır">Sığdır</button>
+      </span>
+      <label class="range-wrap">En büyük N
+        <input id="topN" type="range" min="1" max="40" value="12">
+        <span id="topNValue">12</span>
+      </label>
+      <label class="check-wrap"><input id="showUnresolved" type="checkbox" checked> Unresolved'ları göster</label>
+      <span id="breadcrumb" class="breadcrumb"></span>
+      <span class="hint">Fonları çift tıklayarak aç/kapat · Fare tekerleğiyle yakınlaştır</span>
+    </div>
+    <section id="summary" class="summary"></section>
+    <aside id="details" class="details" aria-live="polite">
+      <button id="closeDetails" class="close" aria-label="Paneli kapat">×</button>
+      <div id="detailsBody"></div>
+    </aside>
+    <div class="legend">
+      <div><span class="swatch" style="background:#102a43"></span>Kök fon</div>
+      <div><span class="swatch" style="background:#8cc8e8"></span>Açılmış alt fon</div>
+      <div><span class="swatch" style="background:#d64545;border-style:dashed"></span>Unresolved fon</div>
+      <div><span class="swatch" style="background:#5bae75"></span>Hisse</div>
+      <div><span class="swatch" style="background:#8b6bbd"></span>Tahvil</div>
+      <div><span class="swatch" style="background:#a7adb4"></span>Mevduat / repo / TBPP</div>
+      <div><span class="swatch shared"></span>İki yoldan ulaşılan</div>
+    </div>
+  </div>
+
+  <script id="data" type="application/json">__GRAPH_DATA__</script>
+  <script>
+    (() => {
+      "use strict";
+      const raw = JSON.parse(document.getElementById("data").textContent);
+      const byId = new Map(raw.nodes.map(node => [node.id, node]));
+      const comparisonById = new Map((raw.lookthrough?.comparison || []).map(item => [item.id, item]));
+      const outgoing = new Map();
+      raw.edges.forEach(edge => {
+        if (!outgoing.has(edge.source)) outgoing.set(edge.source, []);
+        outgoing.get(edge.source).push(edge);
+      });
+      const expanded = new Set([raw.root]);
+      const forced = new Set();
+      let topN = 12;
+      let showAllNodes = false;
+      let showUnresolved = true;
+      let hierarchical = false;
+      let drillRoot = raw.root;
+      let focusId = null;
+      let hoverId = null;
+      let network;
+      let layoutRun = 0;
+      let viewTouched = false;
+      let topTimer;
+      let activePositions = {};
+      let largeView = false;
+      let nodes = new vis.DataSet();
+      let edges = new vis.DataSet();
+      const visibleMeta = new Map();
+      const maxEdgeContribution = Math.max(...raw.edges.map(edge => Math.abs(edge.effective_weight || 0)), 1e-8);
+      const palette = {
+        root: "#102a43", fund: "#8cc8e8", unresolved: "#d64545",
+        equity: "#5bae75", bond: "#8b6bbd", cash: "#a7adb4", other: "#a7adb4"
+      };
+
+      const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
+      })[char]);
+      const percent = value => {
+        const n = Number(value || 0) * 100;
+        const magnitude = Math.abs(n);
+        const digits = magnitude === 0 ? 2 : (magnitude < .001 ? 6 : (magnitude < .01 ? 4 : (magnitude < 1 ? 2 : 1)));
+        return `%${n.toLocaleString("tr-TR", {minimumFractionDigits: digits, maximumFractionDigits: digits})}`;
+      };
+      const signedPercent = value => `${Number(value) > 0 ? "+" : (Number(value) < 0 ? "−" : "")}${percent(Math.abs(Number(value || 0)))}`;
+      const decimal = (value, digits = 4) => Number(value || 0).toLocaleString("tr-TR", {
+        minimumFractionDigits: digits, maximumFractionDigits: digits
+      });
+      const signedDecimal = (value, digits = 6) => `${Number(value) > 0 ? "+" : (Number(value) < 0 ? "−" : "")}${decimal(Math.abs(Number(value || 0)), digits)}`;
+      const scientific = value => Number(value || 0).toExponential(3).replace(".", ",");
+      const cleanId = id => id.replace(/^FUND:/, "").replace(/^ISIN:/, "").replace(/^NAME:/, "");
+      const pathText = path => path.map(id => esc(cleanId(id))).join(" → ");
+      const parentShares = node => Object.entries(node.direct_weights || {})
+        .map(([parent, weight]) => `${cleanId(parent)} içinde ${percent(weight)}`).join(", ") || "—";
+      const pathsText = node => {
+        const contributions = (node.contributions || []).slice(0, 12);
+        if (contributions.length) {
+          return contributions.map(item => `${pathText(item.path)} (${percent(item.weight)})`).join("<br>");
+        }
+        return (node.paths || []).slice(0, 12).map(pathText).join("<br>") || "—";
+      };
+      const tooltip = node => `<b>${esc(node.full_name || node.label)}</b><br>` +
+        `Tür: ${esc(node.type)}<br>Etkin ağırlık: ${percent(node.effective_weight)}<br>` +
+        `Ebeveyn payı: ${esc(parentShares(node))}<br>Yollar:<br>${pathsText(node)}<br>` +
+        `Satır: ${node.row_count || 0} · Sayfa: ${esc(node.page || "—")}`;
+
+      const labelId = id => `__LABEL__:${id}`;
+      const actualId = id => String(id).startsWith("__LABEL__:") ? String(id).slice(10) : id;
+
+      function nodeLabel(node, collapsed = false) {
+        let label = collapsed ? `${node.label}  +${node.child_count}` : node.label;
+        if (drillRoot !== raw.root && node.id !== drillRoot) {
+          const fundShare = node.direct_weights?.[drillRoot] ?? node.direct_weight;
+          label += `\n${cleanId(drillRoot)} içinde ${percent(fundShare)} · kökten ${percent(node.effective_weight)}`;
+        } else if (node.id !== drillRoot) {
+          label += `  ${percent(node.effective_weight)}`;
+        }
+        return label;
+      }
+
+      function visNode(node, collapsed = false, position = {}, inlineFundLabel = false) {
+        const shared = node.multi_path;
+        const unresolved = node.type === "unresolved";
+        const isViewRoot = node.id === drillRoot;
+        const isFund = ["fund", "unresolved"].includes(node.type);
+        const label = isViewRoot
+          ? `${node.label}\n${node.id === raw.root ? "KÖK FON" : "ODAK FON"}`
+          : ((hierarchical || (inlineFundLabel && isFund)) ? nodeLabel(node, collapsed) : "");
+        const fill = isViewRoot ? "#0b3a63" : (palette[node.type] || palette.other);
+        const size = isViewRoot ? 56 : Math.min(55, Math.max(5, 70 * Math.sqrt(Math.abs(node.effective_weight || 0))));
+        const border = isViewRoot ? "#f5b841" : (shared ? "#f28c28" : (unresolved ? "#8b1e1e" : "#243b53"));
+        return {
+          id: node.id, label, title: tooltip(node), size,
+          shape: "dot", color: {
+            background: fill,
+            border,
+            highlight: {background: fill, border: "#f28c28"},
+            hover: {background: fill, border: "#f28c28"}
+          },
+          borderWidth: isViewRoot ? 6 : (shared ? 5 : (unresolved ? 3 : 2)),
+          borderWidthSelected: 6,
+          shapeProperties: {borderDashes: unresolved && !isViewRoot ? [7, 5] : false},
+          font: {
+            color: isViewRoot ? "#ffffff" : "#102a43", face: "system-ui",
+            size: isViewRoot ? 18 : (drillRoot === raw.root ? 15 : 13),
+            strokeWidth: isViewRoot ? 2 : 4,
+            strokeColor: isViewRoot ? "#061a2b" : "#f7f9fc"
+          },
+          shadow: isViewRoot ? {enabled: true, color: "rgba(11,58,99,.35)", size: 18, x: 0, y: 0} : false,
+          fixed: false, x: position.x, y: position.y, opacity: 1
+        };
+      }
+
+      function spreadLabels(items, side, positions) {
+        if (!items.length) return;
+        items.sort((first, second) => first.position.y - second.position.y);
+        const firstY = items[0].position.y;
+        const lastY = items.at(-1).position.y;
+        const gap = drillRoot === raw.root ? 38 : 44;
+        const span = Math.max(lastY - firstY, gap * Math.max(items.length - 1, 0));
+        const start = (firstY + lastY - span) / 2;
+        items.forEach((item, index) => {
+          positions[labelId(item.node.id)] = {
+            x: item.position.x + side * 115,
+            y: start + (items.length === 1 ? span / 2 : span * index / (items.length - 1))
+          };
+        });
+      }
+
+      function radialLabels(view, positions) {
+        const center = positions[drillRoot] || {x: 0, y: 0};
+        const left = [];
+        const right = [];
+        view.visibleNodes.forEach(node => {
+          if (node.id === drillRoot || !positions[node.id]) return;
+          const item = {node, position: positions[node.id]};
+          (item.position.x < center.x ? left : right).push(item);
+        });
+        const labelPositions = {};
+        spreadLabels(left, -1, labelPositions);
+        spreadLabels(right, 1, labelPositions);
+        const labelNodes = [];
+        const labelEdges = [];
+        [...left, ...right].forEach(item => {
+          const id = labelId(item.node.id);
+          const position = labelPositions[id];
+          labelNodes.push({
+            id, _labelFor: item.node.id, label: nodeLabel(item.node, item.node.opened_fund && !expanded.has(item.node.id)),
+            title: tooltip(item.node), shape: "box", margin: {top: 4, right: 7, bottom: 4, left: 7},
+            color: {background: "rgba(247,249,252,.92)", border: "rgba(98,125,152,.24)"}, borderWidth: 1,
+            font: {color: "#102a43", face: "system-ui", size: 14, align: "left"},
+            fixed: false, x: position.x, y: position.y, opacity: 1, chosen: false
+          });
+          labelEdges.push({
+            id: `__LABEL_EDGE__:${item.node.id}`, from: item.node.id, to: id, _labelFor: item.node.id,
+            _baseWidth: .65, _baseColor: "#9fb3c8", width: .65,
+            color: {color: "#9fb3c8", opacity: .52}, arrows: {to: {enabled: false}}, smooth: false,
+            dashes: [3, 5], chosen: false
+          });
+        });
+        return {labelNodes, labelEdges, labelPositions};
+      }
+
+      function visEdge(edge, synthetic = false) {
+        const fromRoot = edge.source === raw.root;
+        const color = fromRoot ? "#315b7d" : "#8cc8e8";
+        const width = .6 + 9 * Math.sqrt(Math.abs(edge.effective_weight || 0) / maxEdgeContribution);
+        return {
+          id: edge.id, from: edge.source, to: edge.target,
+          width, _baseWidth: width, _baseColor: color,
+          title: synthetic ? `${edge.count} pozisyon · ${percent(edge.weight)}` : `Fon içi pay: ${percent(edge.weight)}`,
+          arrows: {to: {enabled: true, scaleFactor: .38}}, color: {color, opacity: width < 2 ? .42 : .72},
+          smooth: false
+        };
+      }
+
+      function buildVisible() {
+        const visibleNodes = new Map();
+        const visibleEdges = new Map();
+        const queue = [drillRoot];
+        const visitedSources = new Set();
+        visibleNodes.set(drillRoot, byId.get(drillRoot));
+        while (queue.length) {
+          const source = queue.shift();
+          if (visitedSources.has(source)) continue;
+          visitedSources.add(source);
+          const sourceNode = byId.get(source);
+          if (source !== drillRoot && sourceNode?.opened_fund && !expanded.has(source)) continue;
+          let candidates = (outgoing.get(source) || []).filter(edge => {
+            const target = byId.get(edge.target);
+            return showUnresolved || target?.type !== "unresolved";
+          }).sort((a, b) => Math.abs(b.effective_weight) - Math.abs(a.effective_weight) || a.target.localeCompare(b.target));
+          const fundEdges = candidates.filter(edge => ["fund", "unresolved"].includes(byId.get(edge.target)?.type));
+          const leafEdges = candidates.filter(edge => !["fund", "unresolved"].includes(byId.get(edge.target)?.type));
+          const kept = showAllNodes
+            ? candidates
+            : [...fundEdges, ...leafEdges.slice(0, Math.max(0, topN - fundEdges.length))];
+          candidates.filter(edge => forced.has(edge.target)).forEach(edge => {
+            if (!kept.some(item => item.id === edge.id)) kept.push(edge);
+          });
+          const keptIds = new Set(kept.map(edge => edge.id));
+          const hidden = candidates.filter(edge => !keptIds.has(edge.id));
+          kept.forEach(edge => {
+            const target = byId.get(edge.target);
+            if (!target) return;
+            visibleNodes.set(target.id, target);
+            visibleEdges.set(edge.id, edge);
+            if (target.opened_fund && expanded.has(target.id)) queue.push(target.id);
+          });
+          if (hidden.length) {
+            const otherId = `OTHER:${source}`;
+            const other = {
+              id: otherId, label: `Diğer (${hidden.length})`, full_name: `Diğer (${hidden.length} pozisyon)`,
+              type: "other", effective_weight: hidden.reduce((sum, edge) => sum + edge.effective_weight, 0),
+              direct_weight: hidden.reduce((sum, edge) => sum + edge.weight, 0), direct_weights: {},
+              parents: [source], row_count: hidden.reduce((sum, edge) => sum + (edge.row_count || 0), 0),
+              paths: [], multi_path: false, opened_fund: false, child_count: 0, quote: "",
+              hidden_targets: hidden.map(edge => edge.target)
+            };
+            const otherEdge = {
+              id: `${source}->${otherId}`, source, target: otherId, weight: other.direct_weight,
+              effective_weight: other.effective_weight, count: hidden.length
+            };
+            visibleNodes.set(otherId, other);
+            visibleEdges.set(otherEdge.id, otherEdge);
+          }
+        }
+        return {visibleNodes, visibleEdges};
+      }
+
+      function layoutPositions() {
+        const full = raw.layouts.full?.positions || {};
+        if (showAllNodes) return full;
+        if (drillRoot !== raw.root) {
+          return {...full, ...(raw.layouts.drilldown?.[drillRoot]?.[String(topN)]?.positions || {})};
+        }
+        const mode = [...expanded].some(id => id !== raw.root) ? "expanded" : "collapsed";
+        return {...full, ...(raw.layouts.radial?.[String(topN)]?.[mode]?.positions || {})};
+      }
+
+      function render({fit = false} = {}) {
+        const view = buildVisible();
+        const positions = layoutPositions();
+        largeView = view.visibleNodes.size > 180;
+        visibleMeta.clear();
+        view.visibleNodes.forEach((node, id) => visibleMeta.set(id, node));
+        const nodeItems = [...view.visibleNodes.values()].map(node =>
+          visNode(
+            node,
+            node.opened_fund && node.id !== drillRoot && !expanded.has(node.id),
+            positions[node.id],
+            largeView,
+          ));
+        const edgeItems = [...view.visibleEdges.values()].map(edge => visEdge(edge, edge.id.includes("OTHER:")));
+        const labels = hierarchical || largeView
+          ? {labelNodes: [], labelEdges: [], labelPositions: {}}
+          : radialLabels(view, positions);
+        nodeItems.push(...labels.labelNodes); edgeItems.push(...labels.labelEdges);
+        activePositions = {...positions, ...labels.labelPositions};
+        nodes = new vis.DataSet(nodeItems);
+        edges = new vis.DataSet(edgeItems);
+        if (network) network.setData({nodes, edges});
+        renderBreadcrumb();
+        if (network) {
+          applyLayout(fit);
+          if (focusId || hoverId) applyHighlight();
+        }
+      }
+
+      function applyLayout(fit = true) {
+        const run = ++layoutRun;
+        viewTouched = false;
+        network.stopSimulation();
+        if (hierarchical) {
+          network.setOptions({layout: {hierarchical: {enabled: true, direction: "LR", sortMethod: "directed", levelSeparation: 210, nodeSpacing: 120, treeSpacing: 240}}, physics: false});
+          if (fit) setTimeout(() => {
+            if (run === layoutRun && !viewTouched) network.fit({animation: {duration: 350}});
+          }, 80);
+        } else {
+          network.setOptions({layout: {hierarchical: {enabled: false}}, physics: false});
+          nodes.update(nodes.getIds().flatMap(id => {
+            const position = activePositions[id];
+            return position ? [{id, x: position.x, y: position.y}] : [];
+          }));
+          if (fit) setTimeout(() => {
+            if (run === layoutRun && !viewTouched) network.fit({animation: {duration: 350}});
+          }, 35);
+        }
+      }
+
+      function renderBreadcrumb() {
+        const breadcrumb = document.getElementById("breadcrumb");
+        if (drillRoot === raw.root) {
+          breadcrumb.innerHTML = `<span>${esc(cleanId(raw.root))}</span>`;
+          return;
+        }
+        breadcrumb.innerHTML = `<button id="breadcrumbRoot" type="button">${esc(cleanId(raw.root))}</button><span>›</span><span>${esc(cleanId(drillRoot))}</span>`;
+        document.getElementById("breadcrumbRoot").onclick = () => leaveDrill();
+      }
+
+      function highlightFor(id) {
+        const nodeIds = new Set([id]);
+        const neighborEdges = new Set();
+        const pathEdges = new Set();
+        edges.get().forEach(edge => {
+          if (edge._labelFor) return;
+          if (edge.from === id || edge.to === id) {
+            nodeIds.add(edge.from); nodeIds.add(edge.to); neighborEdges.add(edge.id);
+          }
+        });
+        const node = visibleMeta.get(id) || byId.get(id);
+        const paths = (node?.contributions || []).map(item => item.path);
+        if (!paths.length) paths.push(...(node?.paths || []));
+        paths.forEach(path => {
+          path.forEach(pathId => {if (visibleMeta.has(pathId)) nodeIds.add(pathId);});
+          for (let index = 0; index < path.length - 1; index += 1) {
+            const edgeId = `${path[index]}->${path[index + 1]}`;
+            if (edges.get(edgeId)) pathEdges.add(edgeId);
+          }
+        });
+        return {nodeIds, neighborEdges, pathEdges};
+      }
+
+      function applyHighlight() {
+        const active = focusId || hoverId;
+        if (largeView && hoverId && !focusId) return;
+        if (!active || !visibleMeta.has(active)) {
+          nodes.update(nodes.get().map(node => ({id: node.id, opacity: 1})));
+          edges.update(edges.get().map(edge => ({
+            id: edge.id, width: edge._baseWidth, color: {color: edge._baseColor, opacity: edge._baseWidth < 2 ? .42 : .72}
+          })));
+          return;
+        }
+        const focus = highlightFor(active);
+        const faded = focusId ? .1 : .25;
+        nodes.update(nodes.get().map(node => ({
+          id: node.id, opacity: focus.nodeIds.has(node._labelFor || node.id) ? 1 : faded
+        })));
+        edges.update(edges.get().map(edge => {
+          if (edge._labelFor) {
+            return {
+              id: edge.id, width: edge._baseWidth,
+              color: {color: edge._baseColor, opacity: focus.nodeIds.has(edge._labelFor) ? .72 : faded}
+            };
+          }
+          const onPath = focus.pathEdges.has(edge.id);
+          const neighbor = focus.neighborEdges.has(edge.id);
+          return {
+            id: edge.id,
+            width: edge._baseWidth + (onPath ? (focusId ? 4 : 2.5) : (neighbor ? 1.5 : 0)),
+            color: {color: edge._baseColor, opacity: onPath || neighbor ? 1 : faded}
+          };
+        }));
+      }
+
+      function enterDrill(id) {
+        const node = byId.get(id);
+        if (!node?.opened_fund) return;
+        drillRoot = id; expanded.add(id); forced.clear(); focusId = null; hoverId = null;
+        document.getElementById("details").classList.remove("open");
+        render({fit: true});
+      }
+
+      function leaveDrill() {
+        drillRoot = raw.root; forced.clear(); focusId = null; hoverId = null;
+        render({fit: true});
+      }
+
+      function setZoom(scaleFactor) {
+        viewTouched = true;
+        const nextScale = Math.min(4, Math.max(.04, network.getScale() * scaleFactor));
+        network.moveTo({position: network.getViewPosition(), scale: nextScale, animation: false});
+      }
+
+      function wheelZoom(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        viewTouched = true;
+        const container = document.getElementById("network");
+        const rect = container.getBoundingClientRect();
+        const pointer = network.DOMtoCanvas({x: event.clientX - rect.left, y: event.clientY - rect.top});
+        const oldView = network.getViewPosition();
+        const oldScale = network.getScale();
+        const factor = Math.exp(-event.deltaY * .0014);
+        const newScale = Math.min(4, Math.max(.04, oldScale * factor));
+        const appliedFactor = newScale / oldScale;
+        const newView = {
+          x: pointer.x - (pointer.x - oldView.x) / appliedFactor,
+          y: pointer.y - (pointer.y - oldView.y) / appliedFactor
+        };
+        network.moveTo({position: newView, scale: newScale, animation: false});
+      }
+
+      function showDetails(id) {
+        const node = visibleMeta.get(id) || byId.get(id);
+        if (!node) return;
+        const shares = parentShares(node);
+        const paths = pathsText(node);
+        const comparison = comparisonById.get(node.id);
+        const fallbackBefore = (node.parents || []).includes(raw.root) ? node.direct_weight : 0;
+        const beforeWeight = comparison?.before_weight ?? fallbackBefore;
+        const afterWeight = comparison?.after_weight ?? node.effective_weight;
+        const change = comparison?.change ?? (afterWeight - beforeWeight);
+        let children = "";
+        if (node.opened_fund || node.id === raw.root) {
+          const rows = (outgoing.get(node.id) || []).slice().sort((a, b) => Math.abs(b.effective_weight) - Math.abs(a.effective_weight)).slice(0, 10)
+            .map(edge => {
+              const child = byId.get(edge.target);
+              return `<tr><td>${esc(child?.label || cleanId(edge.target))}</td><td>${percent(edge.weight)}</td></tr>`;
+            }).join("");
+          children = `<h3>İçindeki en büyük 10 pozisyon</h3><table><thead><tr><th>Pozisyon</th><th>Pay</th></tr></thead><tbody>${rows}</tbody></table>`;
+        }
+        const hidden = node.hidden_targets ? `<p><b>Toplanan hedefler:</b> ${node.hidden_targets.map(cleanId).join(", ")}</p>` : "";
+        const drillButton = node.opened_fund && node.id !== drillRoot
+          ? `<button id="drillButton" class="drill-button" type="button">Bu fona odaklan</button>` : "";
+        document.getElementById("detailsBody").innerHTML = `
+          <h2>${esc(node.full_name || node.label)}</h2>
+          <p><b>Kimlik:</b> ${esc(node.id)}</p><p><b>Tür:</b> ${esc(node.type)}</p>
+          <p><b>ISIN:</b> ${esc(node.isin || "—")}</p>
+          <h3>Look-through önce / sonra</h3>
+          <div class="metric-grid">
+            <div class="metric">Önce: kök raporunda<b>${percent(beforeWeight)}</b></div>
+            <div class="metric">Sonra: etkin pay<b>${percent(afterWeight)}</b></div>
+          </div>
+          <p><b>Değişim:</b> ${signedPercent(change)}${comparison?.status ? ` · ${esc(comparison.status)}` : ""}</p>
+          <p><b>Ebeveyn içindeki pay:</b> ${esc(shares)}</p>
+          <p><b>Ebeveynler:</b> ${esc((node.parents || []).map(cleanId).join(", ") || "—")}</p>
+          <p><b>Yollar:</b><br>${paths}</p>
+          <p><b>Rapor satırı:</b> ${node.row_count || 0} · <b>Sayfa:</b> ${esc(node.page || "—")}</p>
+          ${drillButton}${hidden}<h3>Rapor alıntısı</h3><p class="quote">${esc(node.quote || "Alıntı yok")}</p>${children}`;
+        const button = document.getElementById("drillButton");
+        if (button) button.onclick = () => enterDrill(node.id);
+        document.getElementById("details").classList.add("open");
+      }
+
+      function renderSummary() {
+        const reports = raw.reports.map(item => `${esc(item.code)} ${esc(item.date)}`).join(" · ");
+        const top = raw.summary.unresolved_top.map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
+        const exposureTop = (raw.lookthrough?.exposures || []).slice(0, 5)
+          .map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
+        const matrix = raw.analytics?.matrix_comparison || {};
+        const rootHhi = (raw.analytics?.hhi || []).find(item => item.fund === raw.root) || {};
+        document.getElementById("summary").innerHTML = `<strong>${esc(cleanId(raw.root))}</strong><br>` +
+          `Raporlar: ${reports}<br>Graf: ${raw.summary.node_count} düğüm / ${raw.summary.edge_count} kenar · ` +
+          `Kök toplamı: ${percent(raw.summary.root_total)} · Look-through coverage: ${percent(raw.lookthrough?.coverage)}<br>` +
+          `Matris kontrolü: ${matrix.matches ? "uyumlu" : "uyumsuz"} · HHI: ${decimal(rootHhi.reported)} → ${decimal(rootHhi.lookthrough)}<br>` +
+          `En büyük etkin exposure: ${exposureTop}<br>Unresolved: ${percent(raw.summary.unresolved_total)} · ${top}` +
+          ` · Cutoff: ${percent(raw.summary.cut_off_total)}`;
+      }
+
+      function showLookthroughResults() {
+        const result = raw.lookthrough || {exposures: [], unresolved: [], cut_off: [], cycles: []};
+        const analytics = raw.analytics || {matrix_comparison: {}, hhi: [], overlap: []};
+        const matrix = analytics.matrix_comparison || {};
+        const comparisonRows = (result.comparison || []).map(item => {
+          const color = item.change > 0 ? "#287d46" : (item.change < 0 ? "#b42318" : "#627d98");
+          return `<tr><td>${esc(item.label)}<br><small>${esc(item.status)}</small></td>` +
+            `<td>${percent(item.before_weight)}</td><td>${percent(item.after_weight)}</td>` +
+            `<td style="color:${color};font-weight:700">${signedPercent(item.change)}</td></tr>`;
+        }).join("");
+        const rows = result.exposures.map((item, index) => {
+          const routes = (item.contributions || []).map(part =>
+            `${pathText(part.path)} (${percent(part.weight)})`).join("<br>") || "—";
+          return `<tr><td>${index + 1}. ${esc(item.label)}</td><td>${percent(item.weight)}</td></tr>` +
+            `<tr><td colspan="2" style="padding-left:14px;color:#627d98">${routes}</td></tr>`;
+        }).join("");
+        const unresolved = result.unresolved.map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
+        const cutOff = result.cut_off.map(item => `${esc(item.label)} ${percent(item.weight)}`).join(", ") || "Yok";
+        const cycles = result.cycles.length
+          ? result.cycles.map(cycle => pathText(cycle)).join("<br>") : "Yok";
+        const dates = Object.entries(result.report_dates || {})
+          .map(([fund, date]) => `${esc(fund)}: ${esc(date || "tarih yok")}`).join(" · ") || "—";
+        const matrixDifferences = (matrix.largest_differences || []).map(item =>
+          `<tr><td>${esc(item.label)}</td><td>${scientific(item.difference)}</td></tr>`).join("");
+        const hhiRows = (analytics.hhi || []).map(item => {
+          const direction = item.change > 1e-12 ? "Yoğunlaşma arttı" :
+            (item.change < -1e-12 ? "Yoğunlaşma azaldı" : "Değişmedi");
+          return `<tr><td>${esc(item.label)}</td><td>${decimal(item.reported)}</td>` +
+            `<td>${decimal(item.lookthrough)}</td><td>${signedDecimal(item.change)}</td>` +
+            `<td>${decimal(item.lookthrough_effective_positions, 1)}<br><small>${direction}</small></td></tr>`;
+        }).join("");
+        const overlapRows = (analytics.overlap || []).slice(0, 25).map(item => {
+          const shared = (item.top_shared || []).map(position =>
+            `${esc(position.label)} ${percent(position.weight)}`).join(", ") || "Ortak yaprak yok";
+          return `<tr><td>${esc(item.first_label)} ↔ ${esc(item.second_label)}<br>` +
+            `<small>${item.shared_count} ortak varlık · ${shared}</small></td><td>${percent(item.score)}</td></tr>`;
+        }).join("") || `<tr><td colspan="2">Karşılaştırılabilecek ikinci bir açılmış fon yok.</td></tr>`;
+        document.getElementById("detailsBody").innerHTML = `
+          <h2>Look-through ve risk analizi</h2>
+          <div class="metric-grid">
+            <div class="metric">Coverage<b>${percent(result.coverage)}</b></div>
+            <div class="metric">Toplam<b>${percent(result.total)}</b></div>
+            <div class="metric">Resolved yaprak<b>${result.resolved_count || 0}</b></div>
+            <div class="metric">Unresolved<b>${result.unresolved.length}</b></div>
+            <div class="metric">Cutoff<b>${result.cut_off.length}</b></div>
+          </div>
+          <p><b>Referans tarih:</b> ${esc(result.reference_date || "—")}</p>
+          <p><b>Rapor dönemleri:</b> ${dates}</p>
+          <p><b>Unresolved:</b> ${unresolved}</p>
+          <p><b>Cutoff ile açılmayan:</b> ${cutOff}</p>
+          <p><b>Cycle:</b><br>${cycles}</p>
+          <h3>1. Recursive / matris doğrulaması</h3>
+          <p class="explanation">Aynı etkin ağırlıklar iki bağımsız yöntemle hesaplanır. Recursive yöntem yolları tek tek açar; matris yöntemi <b>(I−F)</b> doğrusal sistemini çözer. En büyük fark 10<sup>−9</sup> toleransının altındaysa sonuç doğrulanmış kabul edilir.</p>
+          <div class="metric-grid">
+            <div class="metric">Sonuç<b class="${matrix.matches ? "status-ok" : "status-error"}">${matrix.matches ? "UYUMLU" : "UYUMSUZ"}</b></div>
+            <div class="metric">En büyük mutlak fark<b>${scientific(matrix.max_abs_difference)}</b></div>
+            <div class="metric">Tolerans<b>${scientific(matrix.tolerance)}</b></div>
+            <div class="metric">Karşılaştırılan yaprak<b>${matrix.leaf_count || 0}</b></div>
+            <div class="metric">Recursive toplam<b>${percent(matrix.recursive_total)}</b></div>
+            <div class="metric">Matris toplam<b>${percent(matrix.matrix_total)}</b></div>
+          </div>
+          <table><thead><tr><th>En büyük farkların varlığı</th><th>Matris − recursive</th></tr></thead><tbody>${matrixDifferences}</tbody></table>
+          <h3>2. HHI yoğunlaşma analizi</h3>
+          <p class="explanation">HHI, normalize edilmiş brüt mutlak pozisyon paylarının kareleri toplamıdır; türevlerdeki negatif ağırlıklar bu yüzden kaybolmaz. Değer yükseldikçe portföy daha az sayıda varlıkta yoğunlaşır. <b>1 / HHI</b>, aynı yoğunlaşmayı veren yaklaşık eşit ağırlıklı pozisyon sayısını gösterir.</p>
+          <div class="table-scroll"><table class="comparison-table"><thead><tr><th>Fon</th><th>Raporlanan</th><th>Look-through</th><th>HHI farkı</th><th>Etkin pozisyon</th></tr></thead><tbody>${hhiRows}</tbody></table></div>
+          <h3>3. Fon overlap analizi</h3>
+          <p class="explanation">Overlap, iki fonun aynı yöndeki nihai varlıklarında küçük brüt payların toplamıdır: <b>Σ min(|w₁|, |w₂|)</b>. Long-short gibi zıt yönler ortak sayılmaz. %100 aynı dağılımı, %0 hiç ortak nihai varlık olmadığını gösterir. Aşağıda en yüksek 25 çift ve en büyük ortak pozisyonları yer alır.</p>
+          <table><thead><tr><th>Fon çifti / ortak varlıklar</th><th>Overlap</th></tr></thead><tbody>${overlapRows}</tbody></table>
+          <h3>Look-through öncesi / sonrası</h3>
+          <p>Önce, kök fon raporundaki doğrudan paydır. Sonra, bütün alt fon yolları açıldıktan sonraki etkin yaprak payıdır.</p>
+          <table class="comparison-table"><thead><tr><th>Varlık</th><th>Önce</th><th>Sonra</th><th>Fark</th></tr></thead>
+            <tbody>${comparisonRows}</tbody></table>
+          <h3>Etkin exposure ve katkı yolları</h3>
+          <table><thead><tr><th>Yaprak</th><th>Etkin pay</th></tr></thead><tbody>${rows}</tbody></table>`;
+        document.getElementById("details").classList.add("open");
+      }
+
+      function revealAndFocus(id) {
+        const node = byId.get(id);
+        if (!node) return;
+        if (drillRoot !== raw.root && id !== drillRoot && !(outgoing.get(drillRoot) || []).some(edge => edge.target === id)) {
+          drillRoot = raw.root;
+        }
+        (node.paths?.[0] || []).forEach(pathId => {
+          forced.add(pathId);
+          if (byId.get(pathId)?.opened_fund) expanded.add(pathId);
+        });
+        focusId = id;
+        forced.add(id); render();
+        setTimeout(() => {
+          network.selectNodes([id]); network.focus(id, {scale: 1.35, animation: {duration: 500}}); showDetails(id); applyHighlight();
+        }, 80);
+      }
+
+      renderSummary();
+      render();
+      network = new vis.Network(document.getElementById("network"), {nodes, edges}, {
+        autoResize: true,
+        interaction: {
+          hover: true, tooltipDelay: 140, navigationButtons: false, keyboard: true,
+          zoomView: false, dragView: true, hideEdgesOnDrag: true, hideEdgesOnZoom: true
+        },
+        nodes: {chosen: false}, edges: {selectionWidth: 0, chosen: false}, physics: false
+      });
+      applyLayout(true);
+      network.on("click", params => {
+        if (!params.nodes.length) {
+          focusId = null; network.unselectAll(); document.getElementById("details").classList.remove("open"); applyHighlight(); return;
+        }
+        const id = actualId(params.nodes[0]);
+        if (params.event?.srcEvent?.shiftKey && byId.get(id)?.opened_fund) {enterDrill(id); return;}
+        focusId = id; hoverId = null; showDetails(id); applyHighlight();
+      });
+      network.on("hoverNode", params => {if (!focusId) {hoverId = actualId(params.node); applyHighlight();}});
+      network.on("blurNode", () => {if (!focusId) {hoverId = null; applyHighlight();}});
+      network.on("dragStart", () => {viewTouched = true;});
+      network.on("doubleClick", params => {
+        const id = actualId(params.nodes[0]); const node = byId.get(id);
+        if (!node?.opened_fund || id === drillRoot) return;
+        showAllNodes = false;
+        document.getElementById("topNValue").textContent = topN;
+        expanded.has(id) ? expanded.delete(id) : expanded.add(id); render({fit: true});
+      });
+
+      document.getElementById("closeDetails").onclick = () => {
+        focusId = null; network.unselectAll(); document.getElementById("details").classList.remove("open"); applyHighlight();
+      };
+      document.getElementById("expandAll").onclick = event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Fonlar açılıyor…";
+        requestAnimationFrame(() => {
+          showAllNodes = false;
+          document.getElementById("topNValue").textContent = topN;
+          raw.nodes.filter(node => node.opened_fund).forEach(node => expanded.add(node.id));
+          render({fit: true});
+          requestAnimationFrame(() => {
+            button.disabled = false;
+            button.textContent = "Fonları aç";
+          });
+        });
+      };
+      document.getElementById("showAllPositions").onclick = event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Hazırlanıyor…";
+        requestAnimationFrame(() => {
+          showAllNodes = true;
+          document.getElementById("topNValue").textContent = "Tümü";
+          raw.nodes.filter(node => node.opened_fund).forEach(node => expanded.add(node.id));
+          render({fit: true});
+          requestAnimationFrame(() => {
+            button.disabled = false;
+            button.textContent = "Tüm pozisyonlar";
+          });
+        });
+      };
+      document.getElementById("collapseAll").onclick = () => {
+        showAllNodes = false;
+        document.getElementById("topNValue").textContent = topN;
+        expanded.clear(); expanded.add(raw.root); expanded.add(drillRoot); forced.clear(); render({fit: true});
+      };
+      document.getElementById("layoutToggle").onclick = event => {
+        hierarchical = !hierarchical; event.currentTarget.textContent = hierarchical ? "Radyal" : "Hiyerarşik"; render({fit: true});
+      };
+      document.getElementById("lookthroughResults").onclick = () => showLookthroughResults();
+      document.getElementById("zoomOut").onclick = () => setZoom(1 / 1.28);
+      document.getElementById("zoomIn").onclick = () => setZoom(1.28);
+      document.getElementById("fitGraph").onclick = () => {viewTouched = false; network.fit({animation: {duration: 350}});};
+      document.getElementById("network").addEventListener("wheel", wheelZoom, {passive: false, capture: true});
+      document.getElementById("topN").oninput = event => {
+        showAllNodes = false;
+        topN = Number(event.target.value); document.getElementById("topNValue").textContent = topN; forced.clear();
+        clearTimeout(topTimer); topTimer = setTimeout(() => render({fit: true}), 120);
+      };
+      document.getElementById("showUnresolved").onchange = event => {showUnresolved = event.target.checked; render({fit: true});};
+      document.getElementById("search").onkeydown = event => {
+        if (event.key !== "Enter") return;
+        const query = event.currentTarget.value.trim().toLocaleLowerCase("tr-TR");
+        if (!query) return;
+        const found = raw.nodes.find(node => `${node.id} ${node.label} ${node.full_name || ""} ${node.isin || ""}`.toLocaleLowerCase("tr-TR").includes(query));
+        if (found) revealAndFocus(found.id);
+      };
+    })();
+  </script>
+</body>
+</html>
