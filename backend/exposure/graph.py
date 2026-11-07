@@ -1,8 +1,4 @@
-"""Holding kayıtlarından fon-varlık grafı kurar.
-
-Nakit ve mevduat şimdilik aynı ``CASH:TRY`` düğümünde birleşir. Bu kimlik kararı kalıcı veri
-sözleşmesi kesinleştiğinde yeniden değerlendirilecektir.
-"""
+"""Holding kayıtlarından ağırlık bazı ve para birimi güvenli fon-varlık grafı kurar."""
 
 from collections.abc import Mapping
 from typing import Any
@@ -24,8 +20,8 @@ def node_key(value: HoldingInput) -> str:
     holding = _validated(value)  # Graf kimliği yalnız şemadan geçmiş kayıttan üretilir.
     if holding.asset_type in FUND_LIKE and holding.held_fund_code:  # Fon ve ETF kodla bağlanır.
         return f"FUND:{holding.held_fund_code}"
-    if holding.asset_type in {AssetType.CASH, AssetType.DEPOSIT}:  # TRY nakdi tek düğümde topla.
-        return "CASH:TRY"
+    if holding.asset_type in {AssetType.CASH, AssetType.DEPOSIT}:  # Nakdi para birimine göre topla.
+        return f"CASH:{holding.currency}"
     if holding.isin:  # ISIN bulunan varlık değişmeyen uluslararası kimliği kullanır.
         return f"ISIN:{holding.isin}"
     name = " ".join(
@@ -36,9 +32,16 @@ def node_key(value: HoldingInput) -> str:
 
 def build_graph(holdings: list[Holding]) -> nx.DiGraph:
     """Holding satırlarını doğrula ve kaynak fonlardan hedeflere ağırlıklı graf kur."""
+    # Bütün girdileri graf mutasyonundan önce doğrula.
+    validated = [_validated(value) for value in holdings]
+    weight_bases = {holding.weight_basis for holding in validated}  # FPD ve FTD karışımını bul.
+    if len(weight_bases) > 1:
+        bases = ", ".join(sorted(basis.value for basis in weight_bases))
+        raise ValueError(f"Tek grafta farklı weight_basis değerleri karıştırılamaz: {bases}")
+
     graph = nx.DiGraph()  # Yönlü graf fonlardan tuttukları varlıklara doğru ilerler.
-    for value in holdings:
-        holding = _validated(value)  # Çalışma zamanında gelen sözlük de şemadan geçirilir.
+    graph.graph["weight_basis"] = next(iter(weight_bases)).value if weight_bases else None
+    for holding in validated:
         source = f"FUND:{holding.fund_code}"  # Raporu yayımlayan fon kaynak düğümdür.
         target = node_key(holding)  # Hedef anahtarı ortak kimlik kuralıyla belirlenir.
         period_end = holding.period_end.isoformat()  # Fon tarihi rapor döneminin bitişidir.

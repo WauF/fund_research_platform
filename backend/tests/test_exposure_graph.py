@@ -49,6 +49,17 @@ def test_node_key_groups_cash_in_try() -> None:
     assert node_key(holding) == "CASH:TRY"
 
 
+def test_node_key_separates_cash_by_currency() -> None:
+    usd = make_holding(
+        asset_type=AssetType.DEPOSIT,
+        isin=None,
+        name="USD Vadeli Mevduat",
+        currency="USD",
+    )
+
+    assert node_key(usd) == "CASH:USD"
+
+
 def test_node_key_uses_isin_when_present() -> None:
     holding = make_holding()
     assert node_key(holding) == "ISIN:TRAASELS91H2"
@@ -68,6 +79,7 @@ def test_same_isin_has_same_key_across_funds_and_names() -> None:
 def test_slide8_edges_and_weights() -> None:
     graph = build_graph(load_holdings())
 
+    assert graph.graph["weight_basis"] == "portfolio"
     assert graph.number_of_edges() == 10
     assert graph["FUND:FA"]["FUND:FB"]["weight"] == pytest.approx(0.40)
     assert graph["FUND:FB"]["FUND:FC"]["weight"] == pytest.approx(0.20)
@@ -113,6 +125,17 @@ def test_empty_holdings_returns_empty_graph() -> None:
     graph = build_graph([])
     assert graph.number_of_nodes() == 0
     assert graph.number_of_edges() == 0
+    assert graph.graph["weight_basis"] is None
+
+
+def test_build_graph_rejects_mixed_weight_bases() -> None:
+    holdings = [
+        make_holding(row_no=1, weight_basis=WeightBasis.PORTFOLIO),
+        make_holding(row_no=2, weight_basis=WeightBasis.TOTAL),
+    ]
+
+    with pytest.raises(ValueError, match="weight_basis"):
+        build_graph(holdings)
 
 
 def test_build_graph_validates_dictionary_input() -> None:
