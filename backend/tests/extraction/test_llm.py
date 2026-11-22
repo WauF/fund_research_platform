@@ -177,3 +177,28 @@ def test_english_number_format():
     _, extraction, check = run(reply)
     assert extraction.errors == []
     assert check.ok
+
+
+@pytest.mark.parametrize("weight_text", ["", "-"])
+def test_missing_weight_is_derived_and_flagged(weight_text):
+    # Before: an empty weight became 0, and a 0-weight row is left out of the value sum, so a
+    # wrong value on that row passed. Now the row is kept, its weight comes from value / portfolio
+    # value, and the report goes to review.
+    reply = correct_reply()
+    row = next(r for r in reply["rows"] if r["held_fund_code"] == "TMV")
+    row["weight_text"] = weight_text
+    _, extraction, check = run(reply)
+    tmv = next(h for h in extraction.holdings if h.held_fund_code == "TMV")
+    assert tmv.weight == Decimal("0.0008")
+    assert len(extraction.holdings) == 23
+    assert [i.code for i in check.issues] == ["extraction_error"]
+    assert all(h.status is Status.NEEDS_REVIEW for h in check.holdings)
+
+
+def test_missing_weight_without_summary_is_not_guessed():
+    reply = correct_reply()
+    reply["summary"] = None
+    reply["rows"][0]["weight_text"] = ""
+    _, extraction, _ = run(reply)
+    assert len(extraction.holdings) == 22
+    assert any("no portfolio value" in e for e in extraction.errors)

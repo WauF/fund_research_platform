@@ -132,30 +132,7 @@ def convert(
         report_kind=meta.report_kind,
         extraction_run_id=run_id,
     )
-    holdings: list[Holding] = []
     errors: list[str] = []
-    for row_no, r in enumerate(report.rows, 1):
-        try:
-            weight = parse_percent(r.weight_text, fmt)
-            holdings.append(
-                Holding(
-                    **scope,
-                    page=r.page,
-                    quote=r.quote,
-                    row_no=row_no,
-                    name=r.name,
-                    asset_type=r.asset_type,
-                    isin=r.isin or None,
-                    instrument_code=r.instrument_code or None,
-                    held_fund_code=r.held_fund_code or None,
-                    value=_num(r.value_text, fmt),
-                    currency=r.currency,
-                    weight=weight if weight is not None else Decimal(0),
-                    weight_basis=r.weight_basis,
-                )
-            )
-        except (ValueError, ValidationError) as exc:
-            errors.append(f"row {row_no} ({r.quote[:40]!r}) not converted: {exc}")
     summary = None
     if s := report.summary:
         try:
@@ -172,6 +149,39 @@ def convert(
             )
         except (ValueError, ValidationError) as exc:
             errors.append(f"summary not converted: {exc}")
+
+    holdings: list[Holding] = []
+    for row_no, r in enumerate(report.rows, 1):
+        try:
+            value = _num(r.value_text, fmt)
+            weight, basis = parse_percent(r.weight_text, fmt), r.weight_basis
+            if weight is None:
+                # An empty weight must not become 0: a 0-weight row is left out of the value sum.
+                # Keep the row with value / portfolio value and send the report to review.
+                if summary is None or not summary.portfolio_value:
+                    raise ValueError("weight not given and no portfolio value to derive it from")
+                weight = (value / summary.portfolio_value).quantize(Decimal("0.0001"))
+                basis = WeightBasis.PORTFOLIO
+                errors.append(f"row {row_no} ({r.quote[:40]!r}): no weight, derived {weight}")
+            holdings.append(
+                Holding(
+                    **scope,
+                    page=r.page,
+                    quote=r.quote,
+                    row_no=row_no,
+                    name=r.name,
+                    asset_type=r.asset_type,
+                    isin=r.isin or None,
+                    instrument_code=r.instrument_code or None,
+                    held_fund_code=r.held_fund_code or None,
+                    value=value,
+                    currency=r.currency,
+                    weight=weight,
+                    weight_basis=basis,
+                )
+            )
+        except (ValueError, ValidationError) as exc:
+            errors.append(f"row {row_no} ({r.quote[:40]!r}) not converted: {exc}")
     return holdings, summary, errors
 
 
