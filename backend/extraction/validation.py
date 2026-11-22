@@ -14,13 +14,21 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from extraction import isin as isin_mod
+from extraction.baseline import ETF_TICKERS
 from schemas.holding import FUND_LIKE, AssetType, Holding, ReportSummary, Status, WeightBasis
 
 # Tolerances. The weight tolerance is the ±3% from the presentation; the TL tolerances absorb
 # rounding of printed values (two decimals per row).
 WEIGHT_TOLERANCE = Decimal("0.03")
-VALUE_REL_TOLERANCE = Decimal("0.005")
 SUMMARY_ABS_TOLERANCE = Decimal("1.00")
+# Rows sum vs portfolio value. Measured on the 23 standard-template reports of September 2026:
+# the largest gap is 0.009% (IRB), so 0.02% leaves 2x headroom and still catches a dropped row of
+# 0.05% (ICN in IRF). Revisit when the LLM covers the other templates.
+VALUE_REL_TOLERANCE = Decimal("0.0002")
+# One row's weight vs value / base value, as a fraction (0.0005 = 0.05 percentage points).
+# Measured: clean rows differ by at most 0.00028 (PBI). Two rows printed wrong by the report itself
+# exceed it and are flagged on purpose (BGP deposit 6,05 for 5,71%; TPC USD collateral).
+ROW_WEIGHT_TOLERANCE = Decimal("0.0005")
 
 
 @dataclass(frozen=True)
@@ -57,6 +65,31 @@ def quote_in_page(quote: str, page_text: str) -> bool:
     return bool(q) and q.replace(" ", "") in normalize_text(page_text).replace(" ", "")
 
 
+def _number_forms(value: Decimal) -> set[str]:
+    """How a value can be printed: 1.234,56 (tr), 1,234.56 (en), or without thousands separators.
+
+    The value keeps its printed decimals (Decimal("977400.00")), so x10 or /10 gives other text.
+    """
+    en = f"{abs(value):,}"
+    tr = en.replace(",", "_").replace(".", ",").replace("_", ".")
+    return {en, tr, en.replace(",", ""), tr.replace(".", "")}
+
+
+def value_in_quote(value: Decimal, quote: str) -> bool:
+    """Is the value printed as a whole token in the quote? Signs and brackets are ignored."""
+    tokens = {t.strip("-()") for t in quote.split()}
+    return bool(tokens & _number_forms(value))
+
+
+def fund_code_in_quote(code: str, quote: str) -> bool:
+    """Is the KAP fund code (or an exchange ticker known for it, GMSTR for FGS) a word in the quote?
+
+    'BGP-AK PORTFÖY', '(CKL) YAPI', 'IOO - İŞ' all count; 'BGPX' does not.
+    """
+    names = {code} | {ticker for ticker, kap in ETF_TICKERS.items() if kap == code}
+    return any(re.search(rf"(?<![A-Z0-9]){re.escape(n)}(?![A-Z0-9])", quote) for n in names)
+
+
 def _check_holding(h: Holding, pages: Sequence[str], known_isins: set[str] | None) -> list[Issue]:
     issues: list[Issue] = []
 
@@ -67,6 +100,13 @@ def _check_holding(h: Holding, pages: Sequence[str], known_isins: set[str] | Non
         add("page_out_of_range", f"page {h.page} does not exist (document has {len(pages)})")
     elif not quote_in_page(h.quote, pages[h.page - 1]):
         add("quote_not_found", f"quote not found on page {h.page}")
+
+    # The quote is checked against the page, so the numbers and the fund code must come from it.
+    # Only the quote counts, not name: name is the extractor's own reading.
+    if not value_in_quote(h.value, h.quote):
+        add("value_not_in_quote", f"value {h.value} is not printed in the quote")
+    if h.held_fund_code is not None and not fund_code_in_quote(h.held_fund_code, h.quote):
+        add("fund_code_not_in_quote", f"{h.held_fund_code} does not appear in the quote")
 
     if h.isin is not None:
         if not isin_mod.is_valid(h.isin):
@@ -80,6 +120,31 @@ def _check_holding(h: Holding, pages: Sequence[str], known_isins: set[str] | Non
     domestic = h.isin is None or h.isin.startswith("TR")
     if h.asset_type in FUND_LIKE and domestic and h.held_fund_code is None:
         add("fund_code_missing", "fund or ETF row without held_fund_code: look-through stops here")
+    return issues
+
+
+def _check_row_weights(holdings: Sequence[Holding], summary: ReportSummary) -> list[Issue]:
+    """Each row's weight must match value / base: the portfolio value for FPD, total for FTD.
+
+    Catches a weight misread on a row too small to move the weight total (IRF TMV is 0.08%).
+    Skipped where the weight is not value / base: derivatives (notional value), 0-weight currency
+    rows (counted under cash equivalents) and rows with an unknown base.
+    """
+    base = {WeightBasis.PORTFOLIO: summary.portfolio_value, WeightBasis.TOTAL: summary.total_value}
+    issues = []
+    for h in holdings:
+        value_base = base.get(h.weight_basis)
+        if not value_base or h.asset_type is AssetType.DERIVATIVE or h.weight == 0:
+            continue
+        implied = h.value / value_base
+        if abs(implied - h.weight) > ROW_WEIGHT_TOLERANCE:
+            issues.append(
+                Issue(
+                    "weight_value_mismatch",
+                    f"weight {h.weight:.4f}, but value / {h.weight_basis} value is {implied:.4f}",
+                    h.row_no,
+                )
+            )
     return issues
 
 
@@ -103,7 +168,7 @@ def _check_totals(holdings: Sequence[Holding], summary: ReportSummary) -> list[I
                 Issue(
                     "holdings_value_mismatch",
                     f"rows sum to {value_sum}, portfolio value is {summary.portfolio_value}"
-                    f" ({rel:.2%} apart)",
+                    f" ({rel:.3%} apart)",
                 )
             )
 
@@ -149,6 +214,7 @@ def validate_report(
     else:
         if summary.page > len(pages) or not quote_in_page(summary.quote, pages[summary.page - 1]):
             issues.append(Issue("summary_quote_not_found", "summary quote not found"))
+        issues.extend(_check_row_weights(holdings, summary))
         issues.extend(_check_totals(holdings, summary))
 
     report_level = any(i.row_no is None for i in issues)
