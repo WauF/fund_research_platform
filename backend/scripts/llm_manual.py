@@ -15,6 +15,7 @@ Run from backend/:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -68,6 +69,7 @@ def make_recording(
         "period_start": row["period_start"],
         "period_end": row["period_end"],
         "report_kind": row["report_kind"],
+        "pdf_path": row["local_path"],
         "pdf_sha256": row["sha256"],
         "model": model,
         "prompt_version": PROMPT_VERSION,
@@ -96,7 +98,10 @@ def replay(recording: dict) -> tuple[LLMExtraction, ValidationResult]:
 
 def record(fund_code: str, reply_path: Path, model: str, note: str) -> Path:
     row = corpus_row(fund_code)
-    pages = extract_pages(ROOT / row["local_path"])
+    pdf = ROOT / row["local_path"]
+    if hashlib.sha256(pdf.read_bytes()).hexdigest() != row["sha256"]:
+        raise SystemExit(f"{pdf} does not match its sha256 in corpus.csv")
+    pages = extract_pages(pdf)
     reply = reply_path.read_text(encoding="utf-8")
     recording = make_recording(row, pages, reply, model, note)
     out = RECORDED / f"{fund_code}_{row['period_start'][:7]}__{model.replace('/', '_')}.json"

@@ -3,11 +3,12 @@
  "period_start": "2026-09-28",
  "period_end": "2026-10-02",
  "report_kind": "weekly",
+ "pdf_path": "data/raw/IRF/IRF_2026-09.pdf",
  "pdf_sha256": "60185d8b4c490d231133a0360b40d7bc7811a905aa7883e5f913a786ca7db7f7",
  "model": "claude-opus-5-5",
  "prompt_version": "2026-10-31.1",
  "produced_by": "Manual run: Claude Opus 5.5 (claude-opus-5-5) in a Claude Code session acting as the extraction model until the LLM provider is decided. It was given SYSTEM_PROMPT and render_pages(pages) verbatim and wrote the JSON reply by hand; no API call, so no temperature setting, structured-output enforcement or token cost. Not blind: the same session had seen the baseline output and the IRF reference values, so this run demonstrates the pipeline and is not an accuracy measurement.",
- "recorded_at": "2026-11-24T15:16:24+00:00",
+ "recorded_at": "2026-11-24T15:23:34+00:00",
  "request_sha256": {
   "system": "b73db6d1c86ef513fdb9af2f4939a537d825762eafed42ea7b7ffcfd1252c977",
   "user": "43fc1ae102e75b92fc5457e9374affc4d71ea3b316b136ef87cb6dcdd68951e5",

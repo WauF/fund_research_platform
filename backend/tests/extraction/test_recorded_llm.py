@@ -5,6 +5,7 @@ Each recording carries its own input text, the request hashes and the raw reply
 here and must be recorded again, instead of an old answer passing silently.
 """
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,9 +13,11 @@ import pytest
 
 from extraction.baseline import parse_report
 from extraction.llm_client import RecordedClient, StaleRecording
+from extraction.pdf_text import extract_pages
 from scripts.llm_manual import replay
 from tests.extraction.test_baseline import IRF_META, IRF_PAGES
 
+ROOT = Path(__file__).parents[3]
 RECORDED = Path(__file__).parents[1] / "recorded"
 RECORDINGS = sorted(RECORDED.glob("*.json"))
 
@@ -35,6 +38,18 @@ def test_recording_replays_and_validates(path):
     assert extraction.errors == []
     assert extraction.holdings, "the reply converted to no rows"
     assert check.ok, check.issues
+
+
+@pytest.mark.parametrize("path", RECORDINGS, ids=lambda p: p.stem)
+def test_recorded_input_is_the_pdf_text_today(path):
+    """The replay hashes the pages stored in the recording; this ties them to the real PDF.
+
+    If the PDF or the text extraction (extraction/pdf_text.py) changes, the recording is stale.
+    """
+    recording = load(path)
+    pdf = ROOT / recording["pdf_path"]
+    assert hashlib.sha256(pdf.read_bytes()).hexdigest() == recording["pdf_sha256"]
+    assert extract_pages(pdf) == recording["pages"], f"{path.name} is stale: record it again"
 
 
 def test_irf_recording_matches_the_baseline():
