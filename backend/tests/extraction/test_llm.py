@@ -18,7 +18,7 @@ from extraction.llm import (
     extract_with_llm,
     validate_extraction,
 )
-from schemas.holding import Status
+from schemas.holding import Status, WeightBasis
 from tests.extraction.test_baseline import IRF_META, IRF_PAGES
 
 RUN_ID = uuid4()
@@ -201,4 +201,25 @@ def test_missing_weight_without_summary_is_not_guessed():
     reply["rows"][0]["weight_text"] = ""
     _, extraction, _ = run(reply)
     assert len(extraction.holdings) == 22
-    assert any("no portfolio value" in e for e in extraction.errors)
+    assert any("no summary" in e for e in extraction.errors)
+
+
+def test_missing_weight_derived_on_the_rows_basis():
+    # Review on #19: a total-basis report must not get one portfolio-basis row.
+    reply = correct_reply()
+    for r in reply["rows"]:
+        r["weight_basis"] = "total"
+    tmv = next(r for r in reply["rows"] if r["held_fund_code"] == "TMV")
+    tmv["weight_text"] = ""
+    _, extraction, _ = run(reply)
+    assert {h.weight_basis for h in extraction.holdings} == {WeightBasis.TOTAL}
+    row = next(h for h in extraction.holdings if h.held_fund_code == "TMV")
+    assert row.weight == Decimal("0.0007")  # 261.168,05 / 378.395.976,36 (total value)
+
+
+def test_missing_weight_with_unknown_basis_is_not_converted():
+    reply = correct_reply()
+    reply["rows"][0].update(weight_text="", weight_basis="unknown")
+    _, extraction, _ = run(reply)
+    assert len(extraction.holdings) == 22
+    assert any("unknown basis" in e for e in extraction.errors)

@@ -336,12 +336,22 @@ def test_fund_code_not_in_quote(code, quote):
         ("977400.00", "NETGL USD 60,000.00 977,400.00 100.00"),
         ("-1250.50", "AKBNK TL -100,00 -1.250,50 -0,10"),
         ("977400.00", "NETGL TL 977400,00"),
+        ("977400.000000", "NETGL TL NET 60.000,00 977.400,00 100,00"),  # NUMERIC(24,6) from the DB
+        ("977400", "NETGL TL NET 60.000,00 977.400,00 100,00"),
     ],
 )
 def test_value_in_quote(value, quote):
     assert value_in_quote(Decimal(value), quote)
 
 
-@pytest.mark.parametrize("value", ["97740.000", "9774000.00", "977400.0"])
+@pytest.mark.parametrize("value", ["97740.000", "9774000.00", "97740.000000"])
 def test_value_not_in_quote(value):
     assert not value_in_quote(Decimal(value), "NETGL TL NET 60.000,00 977.400,00 100,00")
+
+
+def test_irf_revalidated_from_db_precision(irf):
+    # Review on #19: records read back from the database carry 6 decimals. They must still pass.
+    rows = [
+        h.model_copy(update={"value": h.value.quantize(Decimal("0.000001"))}) for h in irf.holdings
+    ]
+    assert validate_report(rows, irf.summary, IRF_PAGES).ok

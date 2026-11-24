@@ -120,6 +120,16 @@ def _num(text: str, fmt: NumberFormat) -> Decimal:
     return value
 
 
+def _derived_weight(value: Decimal, basis: WeightBasis, summary: ReportSummary | None) -> Decimal:
+    """value / base on the given basis: portfolio value for FPD, total value for FTD."""
+    if summary is None:
+        raise ValueError("weight not given and no summary to derive it from")
+    base = {WeightBasis.PORTFOLIO: summary.portfolio_value, WeightBasis.TOTAL: summary.total_value}
+    if not base.get(basis):
+        raise ValueError(f"weight not given and cannot be derived on the {basis} basis")
+    return (value / base[basis]).quantize(Decimal("0.0001"))
+
+
 def convert(
     report: LLMReport, meta: ReportMeta, run_id: UUID
 ) -> tuple[list[Holding], ReportSummary | None, list[str]]:
@@ -157,11 +167,9 @@ def convert(
             weight, basis = parse_percent(r.weight_text, fmt), r.weight_basis
             if weight is None:
                 # An empty weight must not become 0: a 0-weight row is left out of the value sum.
-                # Keep the row with value / portfolio value and send the report to review.
-                if summary is None or not summary.portfolio_value:
-                    raise ValueError("weight not given and no portfolio value to derive it from")
-                weight = (value / summary.portfolio_value).quantize(Decimal("0.0001"))
-                basis = WeightBasis.PORTFOLIO
+                # Derive it on the row's own basis, so one report never mixes bases (review on
+                # #19), keep the row and send the report to review. Unknown basis: not derived.
+                weight = _derived_weight(value, basis, summary)
                 errors.append(f"row {row_no} ({r.quote[:40]!r}): no weight, derived {weight}")
             holdings.append(
                 Holding(

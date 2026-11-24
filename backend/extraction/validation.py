@@ -14,7 +14,8 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 
 from extraction import isin as isin_mod
-from extraction.baseline import ETF_TICKERS
+from extraction.fund_codes import ETF_TICKERS
+from extraction.numbers import parse_number
 from schemas.holding import FUND_LIKE, AssetType, Holding, ReportSummary, Status, WeightBasis
 
 # Tolerances. The weight tolerance is the ±3% from the presentation; the TL tolerances absorb
@@ -65,20 +66,30 @@ def quote_in_page(quote: str, page_text: str) -> bool:
     return bool(q) and q.replace(" ", "") in normalize_text(page_text).replace(" ", "")
 
 
-def _number_forms(value: Decimal) -> set[str]:
-    """How a value can be printed: 1.234,56 (tr), 1,234.56 (en), or without thousands separators.
+def _numbers_in(quote: str) -> set[Decimal]:
+    """Every number in the quote, read as tr (1.234,56) and as en (1,234.56), without its sign.
 
-    The value keeps its printed decimals (Decimal("977400.00")), so x10 or /10 gives other text.
+    Compared as numbers, not text: a value read back from the database (NUMERIC(24,6), so
+    977400.000000) must still match the printed 977.400,00 (review on #19).
     """
-    en = f"{abs(value):,}"
-    tr = en.replace(",", "_").replace(".", ",").replace("_", ".")
-    return {en, tr, en.replace(",", ""), tr.replace(".", "")}
+    found: set[Decimal] = set()
+    for token in quote.split():
+        for fmt in ("tr", "en"):
+            try:
+                number = parse_number(token, fmt)
+            except ValueError:
+                continue  # not a number in this format
+            if number is not None:
+                found.add(abs(number))
+    return found
 
 
 def value_in_quote(value: Decimal, quote: str) -> bool:
-    """Is the value printed as a whole token in the quote? Signs and brackets are ignored."""
-    tokens = {t.strip("-()") for t in quote.split()}
-    return bool(tokens & _number_forms(value))
+    """Is the value printed as one of the numbers in the quote? Signs and brackets are ignored.
+
+    x10 or /10 changes the number itself, so it is still caught.
+    """
+    return abs(value) in _numbers_in(quote)
 
 
 def fund_code_in_quote(code: str, quote: str) -> bool:
