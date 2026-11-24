@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from extraction import isin as isin_mod
+from extraction import weights
 from extraction.fund_codes import ETF_TICKERS
 from extraction.numbers import parse_number
 from extraction.pdf_text import repair_encoding
@@ -363,21 +364,9 @@ def parse_report(
 
 
 def to_total_basis(result: BaselineResult) -> list[Holding]:
-    """The holdings with weights of the fund total value (FTD) instead of the portfolio (FPD).
+    """The baseline's holdings on the fund total value (FTD), see extraction.weights.
 
-    Look-through needs FTD: a parent owns a share of the child fund's total value, not of its
-    portfolio (IRF: FPD is 87.97% of FTD). Uses the printed FTD column; where the report leaves it
-    empty (e.g. VİOP collateral), value / total value. Validate on the FPD records first
-    (extraction.validation): currency rows with 0 FPD weight carry an FTD weight, so the FTD
-    weights no longer add up to FPD / FTD. Without a summary the records are returned unchanged.
+    Uses the printed FTD column; where the report leaves it empty (e.g. VİOP collateral),
+    value / total value. Validate on the FPD records first (extraction.validation).
     """
-    if result.summary is None:
-        return list(result.holdings)
-    total_value = result.summary.total_value
-    converted = []
-    for h in result.holdings:
-        weight = result.printed_total_weights.get(h.row_no)
-        if weight is None:
-            weight = (h.value / total_value).quantize(Decimal("0.0001"))
-        converted.append(h.model_copy(update={"weight": weight, "weight_basis": WeightBasis.TOTAL}))
-    return converted
+    return weights.to_total_basis(result.holdings, result.summary, result.printed_total_weights)
