@@ -16,6 +16,7 @@ from extraction.baseline import (
     check_template,
     detect_meta,
     parse_report,
+    to_total_basis,
 )
 from extraction.validation import validate_report
 from schemas.holding import AssetType, ReportKind, Status, WeightBasis
@@ -187,3 +188,40 @@ def test_short_position_and_fund_code_variants():
         "GMSTR",
         "FGS",
     )
+
+
+# FTD weight (share of IRF's total value) of each sub-fund, as printed.
+# Same as data/irf_look_through_elle.csv.
+IRF_FUND_TOTAL_WEIGHTS = {
+    "BGP": "0.1059", "DLY": "0.0835", "ECA": "0.0063", "EIB": "0.0127", "GPB": "0.0158",
+    "GPZ": "0.0811", "GTF": "0.0067", "ICH": "0.0116", "ICN": "0.0004", "IOO": "0.1046",
+    "IRB": "0.0981", "NJR": "0.0115", "PGD": "0.0057", "PPI": "0.0817", "PTO": "0.0098",
+    "SUA": "0.0285", "TE4": "0.0304", "TMV": "0.0007", "TPF": "0.0392", "ZBJ": "0.0856",
+}  # fmt: skip
+
+
+def test_total_basis_uses_printed_ftd(irf):
+    total = {h.held_fund_code: h for h in to_total_basis(irf) if h.held_fund_code}
+    assert {c: str(h.weight) for c, h in total.items()} == IRF_FUND_TOTAL_WEIGHTS
+    assert all(h.weight_basis is WeightBasis.TOTAL for h in total.values())
+    # Sub-funds are 81.98% of IRF's total value.
+    assert sum(Decimal(w) for w in IRF_FUND_TOTAL_WEIGHTS.values()) == Decimal("0.8198")
+
+
+def test_total_basis_derives_missing_ftd(irf):
+    # VİOP collateral has no FTD column: value / total value = 11.927.534,70 / 378.395.976,36.
+    viop = next(h for h in to_total_basis(irf) if h.row_no == 3)
+    assert irf.printed_total_weights[3] is None
+    assert viop.weight == Decimal("0.0315")
+
+
+def test_total_basis_keeps_everything_else(irf):
+    for before, after in zip(irf.holdings, to_total_basis(irf), strict=True):
+        assert before.model_dump(exclude={"weight", "weight_basis"}) == after.model_dump(
+            exclude={"weight", "weight_basis"}
+        )
+
+
+def test_total_basis_without_summary_is_unchanged(irf):
+    no_summary = type(irf)(irf.meta, irf.holdings, None, [], irf.printed_total_weights)
+    assert to_total_basis(no_summary) == irf.holdings
