@@ -17,7 +17,7 @@ from extraction.validation import Issue, validate_report
 from storage.extractions import save_extraction_run
 from storage.models import ExtractionRun
 
-BASELINE_MODEL = "baseline-rules"
+BASELINE_MODEL = "baseline"  # data contract, docs/veri-sozlesmesi.md §3.5
 
 
 def ingest_baseline(
