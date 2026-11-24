@@ -198,3 +198,9 @@ taranmış) açıkça "desteklenmiyor" olarak reddediliyor. LLM çıkarımı bu 
 9. **corpus.csv notları da eskiyor (24.11).** BGP satırında "Eylül raporu olamaz (muhtemelen Ağustos)"
    yazıyordu. Raporun ay sonu pay fiyatı 6,809489, IRF'nin 30.09'da BGP için kullandığı fiyatla aynı:
    rapor Eylül'e ait. Not düzeltildi.
+10. **Gold taslakları baseline'dan doldurulmuş; doğrulanmadan ölçüm değil (24.11).** `data/gold/`'daki
+    4 taslağın (IRF, ICH, IRB, TPC) 270 satırının 270'i baseline çıktısıyla birebir aynı (quote,
+    değer, ağırlık, ISIN). Baseline'ı bunlara göre ölçmek F1 = 1,0 verir, bir şey kanıtlamaz; LLM'i
+    ölçmek de "baseline'a benzerlik" ölçer. Her satır PDF'le tek tek kontrol edilip `TASLAK` notu
+    kaldırılmadan bu dosyalardan doğruluk sayısı verilmez. `scripts/evaluate_extraction.py` taslak
+    satır içeren dosyayı UNVERIFIED diye işaretliyor.
