@@ -24,6 +24,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx2>=2.16.0",
+    "matplotlib>=3.11.2",
     "moto[s3]>=5.2.5",
     "pymupdf>=2.0",
     "pytest>=9.1",
