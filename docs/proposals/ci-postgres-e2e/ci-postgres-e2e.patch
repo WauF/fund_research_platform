@@ -1,0 +1,124 @@
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 5a9e65e..64c7b70 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -1,6 +1,6 @@
+ # Runs on every PR and on pushes to main. A task is only done when this is green
+-# (see docs/plans/sprint1.md §2). Required status checks on `main`: backend, frontend, docker,
+-# hygiene.
++# (see docs/plans/sprint1.md §2). Required status checks on `main`: backend, backend-postgres,
++# frontend, docker, hygiene.
+ #
+ # CI never calls a real LLM or market-data API: no secrets are passed to any job, pytest-socket
+ # blocks internet access in tests (backend/pyproject.toml), and tests use backend/tests/recorded/
+@@ -55,6 +55,46 @@ jobs:
+       - name: Pytest
+         run: uv run pytest
+
++  # The same tests on Postgres instead of SQLite (tests/conftest.py reads TEST_DATABASE_URL).
++  # SQLite hides Postgres-only behaviour: NUMERIC scale, enum types, constraint and type errors.
++  backend-postgres:
++    name: backend-postgres
++    runs-on: ubuntu-latest
++    timeout-minutes: 10
++    defaults:
++      run:
++        working-directory: backend
++    services:
++      postgres:
++        image: postgres:18.6-alpine  # same as docker-compose.yml
++        env:
++          POSTGRES_USER: fund
++          POSTGRES_PASSWORD: fund
++          POSTGRES_DB: fund_test
++        ports:
++          - 5432:5432
++        options: >-
++          --health-cmd "pg_isready -U fund -d fund_test"
++          --health-interval 2s --health-timeout 5s --health-retries 20
++    env:
++      TEST_DATABASE_URL: postgresql+psycopg://fund:fund@127.0.0.1:5432/fund_test
++      LLM_API_KEY: ""
++      LLM_MODEL: ""
++    steps:
++      - uses: actions/checkout@v7
++
++      - uses: astral-sh/setup-uv@v10.2.0
++        with:
++          working-directory: backend
++          enable-cache: true
++          cache-dependency-glob: backend/uv.lock
++
++      - name: Install dependencies
++        run: uv sync --locked
++
++      - name: Pytest on Postgres
++        run: uv run pytest
++
+   frontend:
+     name: frontend
+     runs-on: ubuntu-latest
+@@ -126,6 +166,30 @@ jobs:
+               "select count(*) from documents where sha256 = '"'"'$SHA'"'"'"')
+           [ "$rows" = 1 ]
+
++      # A real KAP report through the whole path on the running stack: PDF -> SeaweedFS ->
++      # documents -> baseline extraction -> validation -> holdings (FTD) -> API. Run twice: the
++      # second run must not add anything (reprocessing creates 0 duplicate holdings).
++      - uses: astral-sh/setup-uv@v10.2.0
++        with:
++          working-directory: backend
++          enable-cache: true
++          cache-dependency-glob: backend/uv.lock
++
++      - name: Extraction smoke test
++        working-directory: backend
++        run: |
++          uv sync --locked
++          uv run python -m scripts.ingest_corpus IRF | tee "$RUNNER_TEMP/ingest.txt"
++          grep -Eq '^IRF +saved +document [0-9]+, 23 rows, ok$' "$RUNNER_TEMP/ingest.txt"
++          id=$(sed -nE 's/^IRF +saved +document ([0-9]+),.*/\1/p' "$RUNNER_TEMP/ingest.txt")
++          curl -fsS "http://localhost:8000/documents/$id/holdings" > "$RUNNER_TEMP/holdings.json"
++          h="$RUNNER_TEMP/holdings.json"
++          [ "$(jq '.holdings | length' "$h")" = 23 ]
++          [ "$(jq -r '.run.status' "$h")" = ok ]
++          [ "$(jq -r '[.holdings[].weight_basis] | unique | join(",")' "$h")" = total ]
++          [ "$(jq -r '.holdings[] | select(.held_fund_code == "BGP") | .weight' "$h")" = 0.1059 ]
++          uv run python -m scripts.ingest_corpus IRF | grep -Eq '^IRF +skipped'
++
+       # Every downgrade() must work on real Postgres too (SQLite misses e.g. leftover enum types).
+       # Rules: .claude/skills/db-migrations/SKILL.md
+       - name: Migration round trip
+diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
+index 6c24e1b..9a75c5f 100644
+--- a/backend/tests/conftest.py
++++ b/backend/tests/conftest.py
+@@ -1,8 +1,11 @@
+ """Shared fixtures: the API against SQLite in memory and moto's in-process S3 mock (no sockets).
+
+-The real stack (Postgres + SeaweedFS) is covered by the CI docker smoke test.
++With TEST_DATABASE_URL set (CI job backend-postgres), every test that uses the database runs on
++that Postgres instead, so Postgres-only behaviour (NUMERIC scale, enum types, constraints) is
++tested too. The whole stack (Postgres + SeaweedFS + API) is covered by the CI docker job.
+ """
+
++import os
+ from collections.abc import Iterator
+
+ import boto3
+@@ -23,6 +26,15 @@ BUCKET = "documents"
+
+ @pytest.fixture
+ def session_factory() -> Iterator[sessionmaker[Session]]:
++    if url := os.environ.get("TEST_DATABASE_URL"):
++        # A fresh schema per test, as with SQLite in memory.
++        engine = create_engine(url)
++        Base.metadata.drop_all(engine)
++        Base.metadata.create_all(engine)
++        yield sessionmaker(engine)
++        engine.dispose()
++        return
++
+     # One shared connection: TestClient runs sync endpoints in a worker thread.
+     engine = create_engine(
+         "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
