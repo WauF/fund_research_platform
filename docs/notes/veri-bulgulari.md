@@ -1,7 +1,10 @@
 # Veri bulguları ve dikkat edilecekler (Eylül 2026 IRF corpus'u)
 
-Repo açılmadan önce (25 Ekim) yapılan veri incelemesinin kaydı. Kararlar ayrı notlar olarak
-`docs/decisions/` altında (0002–0007); burada bulgular, açık sorular ve elle look-through sonuçları var.
+Repo açılmadan önce (25 Ekim) yapılan veri incelemesinin kaydı; o günden beri **canlı liste** olarak
+güncelleniyor. Kararlar ayrı notlar olarak `docs/decisions/` altında; burada bulgular, açık sorular,
+elle look-through sonuçları ve §5'te çalışırken bulunan püf noktaları var. Projeyi şekillendiren yeni
+bir bulgu çıktığında, düzeltmesiyle aynı PR'da §5'e kanıtı ve tarihiyle eklenir; eskiyen madde silinmez,
+üstü çizilip neden eskidiği yazılır.
 
 **İlgili veri dosyaları**
 - `data/corpus.csv`: indirilen 58 rapor. İlk dört sütun repo şablonuyla aynı (`fund_code`,
@@ -24,7 +27,8 @@ Repo açılmadan önce (25 Ekim) yapılan veri incelemesinin kaydı. Kararlar ay
 3. Tek oran veren raporlarda (EIB, PGD, SUA ve Ziraat formatı) oran FPD'ye mi FTD'ye mi göre?
 4. FGS'nin haftalık raporu hangi haftaya ait? (PDF 01.10'da üretilmiş, başlıkta tarih yok.)
 5. Hâlâ bekleyen ekip kararları: LLM erişimi (API mi, danışmanın GPU'su mu), 4. fon (GTM mi HIH mi).
-6. PDF'ler repoda mı tutulacak? ([0007](../decisions/0007-pdfler-repoda.md))
+   *(24.11: LLM kararı hâlâ açık; ara çözüm olarak model elle çalıştırılıyor, bkz. §5.6.)*
+6. ~~PDF'ler repoda mı tutulacak?~~ Kapandı: evet, [0007](../decisions/0007-pdfler-repoda.md).
 
 ## 2. Veri bulguları
 
@@ -109,7 +113,9 @@ Birincil 36 raporda 6 format ailesi var:
 
 ### 2.7 Kural tabanlı baseline sonuçları
 `backend/scripts/evaluate_baseline.py` (31.10.2026): standart şablondaki 23 birincil raporun hepsi
-okundu (FGS dönemi belirsiz olduğu için atlandı), **1.474 satır, 23/23 rapor doğrulamadan geçiyor**.
+okundu (FGS dönemi belirsiz olduğu için atlandı), **1.474 satır**. 31.10'da 23/23 rapor doğrulamadan
+geçiyordu; 22.11'de satır düzeyi kontroller eklenince **21/23**: BGP ve TPC'de birer satır, raporun
+kendi basım hatası yüzünden `needs_review` (§5.4).
 IRF'nin 20 alt fonu elle referansla birebir aynı (değer, ağırlık, ISIN, fon kodu); ICH, TE4 ve GTF'nin
 alt fon listeleri de referansla aynı. Diğer 12 rapor (Garanti, Astra/Ünlü, Ziraat, Yapı Kredi,
 taranmış) açıkça "desteklenmiyor" olarak reddediliyor. LLM çıkarımı bu çıtayı geçmeli (kriter 1).
@@ -148,7 +154,47 @@ taranmış) açıkça "desteklenmiyor" olarak reddediliyor. LLM çıkarımı bu 
   - Şema yalnızca yapıyı zorlar; ISIN kontrol hanesi ve toplam toleransı gibi anlamsal kontroller kaydı reddetmez, `needs_review` yapar (kayıt kaybolmasın).
 - **Snapshot sahipliği iki pakete dağılmış;** netleştirilmeli. Öneri: tablo ve tetikleyici C'de, snapshot üreten fonksiyon B'de.
 - **"Geçerli kayıt" (effective holding) mantığı tanımsız:** orijinal kayıt + düzeltme. Kimin yazacağı belirlenmeli.
-- **Exposure JSON formatı** Sprint 2 başı yerine Sprint 1 sonunda belirlenmeli; C erken başlayabilsin.
-- **Gold set:** 12 rapor etiketlenmeli, en geç 5–6 Kasım'a kadar. Held-out olacak 4 raporu Paket A sahibi etiketlememeli. `irf_look_through_elle.csv` ilk referans olarak kullanılabilir.
+- **Exposure JSON formatı** Sprint 2 başı yerine Sprint 1 sonunda belirlenmeli; C erken başlayabilsin. *(24.11: hâlâ karar notu yok.)*
+- **Gold set:** 12 rapor etiketlenmeli (~~en geç 5–6 Kasım~~ kaçtı; 24.11'de 4 taslak var: IRF, ICH, IRB, TPC). Held-out olacak 4 raporu Paket A sahibi etiketlememeli. `irf_look_through_elle.csv` ilk referans olarak kullanılabilir. Bkz. §5.6.
 - **Bireysel katkı:** spec her öğrencinin kendi önemli işini yapmasını istiyor; başkasının paketinin kod işine girilmemeli.
 - **CI gerçek LLM çağırmaz;** testler kayıtlı çıktılarla çalışır. Prompt injection test PDF'i (gömülü talimatlı rapor) gerekli.
+
+## 5. Püf noktaları (canlı liste)
+
+Çalışırken bulunan, projeyi şekillendiren noktalar. Her madde: ne, kanıt, ne yapıyoruz.
+
+1. **Paketler arası sınırda test et (22–24.11).** #18 ve #19'daki üç hata da birim testlerin geçmediği
+   sınırlardaydı: DB'den geri okunan değerler `NUMERIC(24,6)` ölçeğiyle gelir (`977400.000000`);
+   `build_graph` tek grafta iki ağırlık tabanını reddeder; yükleme yarıda kalırsa önce yazılan satır
+   boş bir nesneyi gösterir. Kural: PR öncesi DB'ye yaz-geri oku-yeniden doğrula, çıktıyı
+   `build_graph`'a ver, G/Ç hatası enjekte et; yeni testin eski kodda gerçekten kırıldığını göster.
+   Testler: `backend/tests/extraction/test_boundaries.py`.
+2. **Sayıları metin olarak değil sayı olarak karşılaştır (24.11).** Ondalık hane sayısı kaynağa göre
+   değişir (rapor `977.400,00`, DB `977400.000000`, API `977400`). `value_in_quote` artık sayı
+   karşılaştırıyor.
+3. **Bir rapor = bir ağırlık tabanı (24.11).** Eksik ağırlık satırın kendi tabanında türetilir
+   (FPD → portföy değeri, FTD → toplam değer); `unknown`'da türetilmez. Saklanan kayıtlar FTD
+   ([0009](../decisions/0009-agirlik-tabani-ftd.md)).
+4. **KAP raporu kendi içinde tutarsız olabilir (22.11).** BGP Eylül: Ziraat mevduat satırında FPD 6,05
+   basılı, ama değer/portföy değeri %5,71 ve grup toplamı da tutmuyor. TPC: "Yurtdışı Futures USD"
+   teminatında 0,02, TL değere değil USD tutarına uyuyor. Sessizce düzeltilmez; satır `needs_review`
+   olur. Satır düzeyi toleranslar tek ay / tek şablondan ölçüldü (değer toplamı %0,02, satır ağırlığı
+   0,05 puan); diğer şablonlarda yeniden ölçülmeli.
+5. **İsim, kimlik değil ama graf anahtarı olabiliyor (22.11).** ISIN'siz ve fon olmayan satırlarda
+   `exposure.graph.node_key` adı kullanıyor. Baseline para piyasası / döviz satırlarında satırın tamamını
+   ad yapıyor (`TPP 01/10/26 0 38,90 500.532.876,71 ...`), bu yüzden her satır ayrı yaprak oluyor.
+   Düzeltme Paket A'da (temiz ad).
+6. **Elle çalıştırılan model "kör" değil; gold set'e dokunmamalı (24.11).** LLM sağlayıcısı seçilene kadar
+   çıkarım modeli bir Claude oturumunda elle çalıştırılıyor (`scripts/llm_manual.py`,
+   `tests/recorded/`). O oturum baseline çıktısını ve IRF referansını görmüştü: bu kayıtlar boru hattını
+   gösterir, doğruluk ölçmez. F1 / ağırlık hatası yalnızca bizim etiketlediğimiz gold set'ten ölçülür;
+   gold set etiketleri aynı modelle üretilmez, held-out 4 raporu Paket A sahibi etiketlemez.
+7. **Kayıtlı LLM çıktısı girdisine bağlı (24.11).** Kayıt; prompt, şema ve sayfa metninin sha256'sını ve
+   PDF'in sha256'sını taşır. `pdf_text` ya da prompt değişirse kayıt "bayat" olur ve test kırılır; eski
+   cevap sessizce geçmez.
+8. **iCloud Masaüstü senkronu " 2" kopyaları üretiyor (24.11).** Repo `~/Desktop` altında olunca git dosya
+   değiştirdiğinde iCloud `graph 2.py` gibi birebir kopyalar bırakıyor; pytest bunları da topluyor.
+   Repo iCloud dışında tutulmalı; `git status`'ta `" 2."` görünürse silinmeli.
+9. **corpus.csv notları da eskiyor (24.11).** BGP satırında "Eylül raporu olamaz (muhtemelen Ağustos)"
+   yazıyordu. Raporun ay sonu pay fiyatı 6,809489, IRF'nin 30.09'da BGP için kullandığı fiyatla aynı:
+   rapor Eylül'e ait. Not düzeltildi.
