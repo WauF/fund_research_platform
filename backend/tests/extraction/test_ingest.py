@@ -150,3 +150,33 @@ def test_corpus_unsupported_uploads_nothing(session, s3, corpus, monkeypatch):
     assert outcome.result == "unsupported"
     assert "Contents" not in s3.list_objects_v2(Bucket=BUCKET)
     assert get_by_sha256(session, script.hashlib.sha256(PDF_BYTES).hexdigest()) is None
+
+
+def test_corpus_failed_upload_is_retried(session, s3, corpus):
+    # Review on #18: the document row was saved before the upload, so a failed upload was never
+    # retried and storage_key pointed to nothing.
+    root, rows = corpus
+    store = ObjectStore(s3, BUCKET)
+    real_put = store.put
+    calls = []
+
+    def put_failing_once(*args):
+        calls.append(args[0])
+        if len(calls) == 1:
+            raise ConnectionError("upload failed")
+        real_put(*args)
+
+    store.put = put_failing_once
+    with pytest.raises(ConnectionError):
+        script.ingest_corpus(session, store, rows, root)
+    assert get_by_sha256(session, script.hashlib.sha256(PDF_BYTES).hexdigest()) is None
+
+    [outcome] = script.ingest_corpus(session, store, rows, root)
+
+    assert outcome.result == "saved"
+    doc = get_by_sha256(session, script.hashlib.sha256(PDF_BYTES).hexdigest())
+    assert s3.get_object(Bucket=BUCKET, Key=doc.storage_key)["Body"].read() == PDF_BYTES
+
+
+def test_baseline_model_name_matches_data_contract():
+    assert BASELINE_MODEL == "baseline"

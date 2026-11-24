@@ -1,11 +1,12 @@
 """Load the primary reports of data/corpus.csv into the database with the rule-based baseline.
 
-Run from backend/ with the stack up (DATABASE_URL and S3_* as in .env):
+Run from backend/ with the stack up (POSTGRES_* and S3_* as in .env):
     uv run python -m scripts.ingest_corpus [--dry-run] [--force] [FUND ...]
 
-For each report: the PDF is uploaded and registered like POST /documents (same sha256 -> same
-document), then extracted and saved as a new extraction run. Reports outside the standard template
-are skipped. A document that already has a baseline run is skipped unless --force.
+For each report: the PDF is uploaded, then registered, in the same order as POST /documents (same
+sha256 -> same document and object key, so a retry after a failed upload is safe), then extracted
+and saved as a new extraction run. Reports outside the standard template are skipped. A document
+that already has a baseline run is skipped unless --force.
 --dry-run extracts and validates without touching the database or object storage.
 """
 
@@ -21,7 +22,13 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from extraction.baseline import ReportMeta, UnsupportedTemplate, parse_report
+from extraction.baseline import (
+    ReportMeta,
+    UnsupportedTemplate,
+    check_template,
+    detect_meta,
+    parse_report,
+)
 from extraction.ingest import BASELINE_MODEL, ingest_baseline
 from extraction.pdf_text import extract_pages
 from extraction.validation import validate_report
@@ -84,23 +91,31 @@ def ingest_corpus(
                 status = "ok" if check.ok and not result.warnings else "needs_review"
                 outcomes.append(Outcome(code, "checked", f"{len(result.holdings)} rows, {status}"))
                 continue
-            parse_report(pages, meta)  # reject other templates before uploading anything
+            # Reject other templates before uploading anything; the full parse runs once, in
+            # ingest_baseline. Without a period in corpus.csv it comes from the header.
+            check_template(pages) if meta else detect_meta(pages)
         except UnsupportedTemplate as exc:
             outcomes.append(Outcome(code, "unsupported", str(exc)))
             continue
 
         sha256 = hashlib.sha256(body).hexdigest()
+        storage_key = f"pdfs/{sha256}.pdf"
+        # Upload first, register second (as POST /documents): if the upload fails, no row points
+        # to a missing object. The key is content-addressed, so uploading again is harmless.
+        with open(pdf, "rb") as f:
+            store.put(storage_key, f, "application/pdf")
         document, created = add_document(
             session,
             sha256=sha256,
             original_filename=pdf.name,
             size_bytes=len(body),
-            storage_key=f"pdfs/{sha256}.pdf",
+            storage_key=storage_key,
         )
-        if created:
-            with open(pdf, "rb") as f:
-                store.put(document.storage_key, f, "application/pdf")
-        elif not force and any(r.model == BASELINE_MODEL for r in list_runs(session, document.id)):
+        if (
+            not created
+            and not force
+            and any(r.model == BASELINE_MODEL for r in list_runs(session, document.id))
+        ):
             outcomes.append(Outcome(code, "skipped", f"document {document.id} already extracted"))
             continue
         run = ingest_baseline(session, document_id=document.id, pages=pages, meta=meta)
