@@ -6,7 +6,12 @@ the gold file uses (FPD), before the conversion to total value.
 
 How rows are matched and scored:
 - A predicted row matches a gold row with the same ISIN (or both without one) and the same value.
-  Each gold row is matched at most once, so repeated lots (Garanti) are counted one by one.
+  Rows without an ISIN (deposits, cash, repo, ...) must also be the same instrument: same currency,
+  and the same instrument code if both have one, otherwise the same name (case, punctuation and
+  spacing ignored; one name may contain the other as whole words, e.g. "TEB A.Ş." in
+  "TEB A.Ş. mevduat"). Without that, any row with the right value would pass, whatever its name.
+  Each gold row is matched at most once, so repeated lots (Garanti) are counted one by one; among
+  equal candidates the one with the right asset type and fund code is taken first.
   A wrong value or ISIN therefore counts twice: a row the extractor invented and a row it missed.
 - A matched row is correct if asset type and fund code also agree. Precision = correct / predicted,
   recall = correct / gold, F1 their harmonic mean.
@@ -19,6 +24,7 @@ numbers are not an accuracy measurement.
 from __future__ import annotations
 
 import csv
+import re
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -33,7 +39,10 @@ DRAFT_MARK = "TASLAK"
 @dataclass(frozen=True)
 class GoldRow:
     row_no: int
+    name: str
     isin: str | None
+    instrument_code: str | None
+    currency: str
     value: Decimal
     weight: Decimal
     weight_basis: str
@@ -81,7 +90,10 @@ def read_gold(path: Path) -> list[GoldRow]:
         return [
             GoldRow(
                 row_no=int(r["row_no"]),
+                name=r["name"],
                 isin=r["isin"] or None,
+                instrument_code=r["instrument_code"] or None,
+                currency=r["currency"],
                 value=Decimal(r["value"]),
                 weight=Decimal(r["weight"]),
                 weight_basis=r["weight_basis"],
@@ -97,6 +109,45 @@ def _key(isin: str | None, value: Decimal) -> tuple[str, Decimal]:
     return (isin or "", value.quantize(Decimal("0.01")))
 
 
+def _words(name: str) -> list[str]:
+    # Turkish dotted/dotless I first, or "İŞ" and "iş" would not compare equal after lower().
+    lowered = name.replace("İ", "i").replace("I", "ı").lower()
+    return re.findall(r"\w+", lowered)
+
+
+def _same_name(a: str, b: str) -> bool:
+    """Equal, or one name appears inside the other as whole words, in order.
+
+    "TEB A.Ş." and "TEB A.Ş. mevduat (vade 01/10/26)" name the same deposit; criterion 1 is about
+    getting the right rows, not one naming style. A different bank still fails.
+    """
+    short, long = sorted((_words(a), _words(b)), key=len)
+    n = len(short)
+    return n > 0 and any(long[i : i + n] == short for i in range(len(long) - n + 1))
+
+
+def _same_instrument(h: Holding, g: GoldRow) -> bool:
+    """For rows without an ISIN, the value alone does not say which instrument it is."""
+    if h.isin or g.isin:
+        return True  # the ISIN is already part of the key
+    if h.currency != g.currency:
+        return False
+    if h.instrument_code and g.instrument_code:
+        return h.instrument_code.upper() == g.instrument_code.upper()
+    return _same_name(h.name, g.name)
+
+
+def _wrong_fields(h: Holding, g: GoldRow) -> list[str]:
+    return [
+        name
+        for name, ours, theirs in (
+            ("asset_type", h.asset_type.value, g.asset_type),
+            ("held_fund_code", h.held_fund_code, g.held_fund_code),
+        )
+        if ours != theirs
+    ]
+
+
 def score(predicted: Sequence[Holding], gold: Sequence[GoldRow]) -> Score:
     unmatched: dict[tuple[str, Decimal], list[GoldRow]] = defaultdict(list)
     for g in gold:
@@ -104,20 +155,16 @@ def score(predicted: Sequence[Holding], gold: Sequence[GoldRow]) -> Score:
 
     result = Score(len(gold), len(predicted), 0, 0, gold_verified=not any(g.draft for g in gold))
     for h in predicted:
-        candidates = unmatched.get(_key(h.isin, h.value))
-        if not candidates:
-            result.mistakes.append(f"row {h.row_no}: not in gold ({h.isin}, {h.value})")
+        same = [g for g in unmatched.get(_key(h.isin, h.value), []) if _same_instrument(h, g)]
+        if not same:
+            result.mistakes.append(f"row {h.row_no}: not in gold ({h.isin or h.name}, {h.value})")
             continue
-        g = candidates.pop(0)
+        # Prefer a candidate that agrees on everything, so the order of the gold rows can't turn
+        # a correct row into a wrong one.
+        g = next((c for c in same if not _wrong_fields(h, c)), same[0])
+        unmatched[_key(g.isin, g.value)].remove(g)
         result.matched += 1
-        wrong = [
-            name
-            for name, ours, theirs in (
-                ("asset_type", h.asset_type.value, g.asset_type),
-                ("held_fund_code", h.held_fund_code, g.held_fund_code),
-            )
-            if ours != theirs
-        ]
+        wrong = _wrong_fields(h, g)
         if wrong:
             result.mistakes.append(f"row {h.row_no} (gold {g.row_no}): wrong {', '.join(wrong)}")
         else:
@@ -127,5 +174,7 @@ def score(predicted: Sequence[Holding], gold: Sequence[GoldRow]) -> Score:
         else:
             result.basis_mismatches += 1
     for rows in unmatched.values():
-        result.mistakes.extend(f"gold row {g.row_no}: missed ({g.isin}, {g.value})" for g in rows)
+        result.mistakes.extend(
+            f"gold row {g.row_no}: missed ({g.isin or g.name}, {g.value})" for g in rows
+        )
     return result
