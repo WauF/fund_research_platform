@@ -30,6 +30,6 @@ The three bugs you found in #18/#19 were all at boundaries our CI never crossed:
 - **YAML:** parses and `check-yaml` passes. I couldn't run actionlint here.
 
 ## Before merging
-- **The smoke step needs `scripts/ingest_corpus.py`, which is in #18.** Apply this after #18 is merged, or the step fails.
+- **The smoke step needs `scripts/ingest_corpus.py`.** It came with #18, which is merged, so this applies cleanly on today's `main`.
 - **Add `backend-postgres` to the required status checks on `main`.** That's a branch protection setting; I can't see it.
 - **Timing:** the new job takes about 30 s plus the Postgres service start. The smoke step adds `uv sync` plus a few seconds to the docker job.

@@ -204,3 +204,15 @@ taranmış) açıkça "desteklenmiyor" olarak reddediliyor. LLM çıkarımı bu 
     ölçmek de "baseline'a benzerlik" ölçer. Her satır PDF'le tek tek kontrol edilip `TASLAK` notu
     kaldırılmadan bu dosyalardan doğruluk sayısı verilmez. `scripts/evaluate_extraction.py` taslak
     satır içeren dosyayı UNVERIFIED diye işaretliyor.
+11. **ISIN'siz satırın kimliği değer değil (25.11, Yusuf'un #23 incelemesi).** Değerlendirme ISIN'siz
+    satırları yalnızca değerle eşleştiriyordu; adı tamamen yanlış satır F1 = 1,0 alıyordu. Artık para
+    birimi + `instrument_code` ya da ad (tam kelime olarak) da tutmalı. Genel kural: bir eşleştirme
+    anahtarı yazarken "anahtarı tutan ama yanlış olan satır" testini de yaz. Gold rehberine kural 9
+    eklendi (ISIN'siz satırda `name` = kurum / araç adı).
+12. **Yerel kontrol koşmadıysa "geçti" deme (25.11).** Bu klonda pre-commit hook'u kurulu değildi ve
+    `uv run pre-commit` venv'de yok; çıktısı atılan komut "geçti" sanıldı, #21 hygiene işinde kırıldı
+    (`git diff` boş bağlam satırına tek boşluk yazar, trailing-whitespace siler). Kural: her kontrolün
+    çıkış kodu açıkça okunur; repoda `uvx pre-commit run --all-files`; klonda `uvx pre-commit install`.
+    Aynı turda: `setup-uv`'de `cache-dependency-glob`, `working-directory`'ye göre çözülür
+    (`backend/uv.lock` → `backend/backend/uv.lock`, önbellek hiç yenilenmiyor). CI logundaki
+    uyarılar da okunur.
