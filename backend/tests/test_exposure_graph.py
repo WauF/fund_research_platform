@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 from exposure.graph import build_graph, node_key
-from schemas.holding import AssetType, Holding, ReportKind, WeightBasis
+from schemas.holding import AssetType, Holding, ReportKind, Status, WeightBasis
+from storage.models import HoldingRow
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "slide8.json"
 
@@ -76,10 +77,15 @@ def test_same_isin_has_same_key_across_funds_and_names() -> None:
     assert node_key(first) == node_key(second) == "ISIN:TRAAKBNK91N6"
 
 
-def test_slide8_edges_and_weights() -> None:
+def test_slide8_edges_and_weights(caplog: pytest.LogCaptureFixture) -> None:
     graph = build_graph(load_holdings())
 
     assert graph.graph["weight_basis"] == "portfolio"
+    assert graph.graph["lookthrough_ready"] is False
+    assert graph.graph["weight_basis_warning"] is not None
+    assert graph.graph["review_rows"] == []
+    assert graph.graph["review_warning"] is None
+    assert "total (FTD)" in caplog.text
     assert graph.number_of_edges() == 10
     assert graph["FUND:FA"]["FUND:FB"]["weight"] == pytest.approx(0.40)
     assert graph["FUND:FB"]["FUND:FC"]["weight"] == pytest.approx(0.20)
@@ -126,6 +132,10 @@ def test_empty_holdings_returns_empty_graph() -> None:
     assert graph.number_of_nodes() == 0
     assert graph.number_of_edges() == 0
     assert graph.graph["weight_basis"] is None
+    assert graph.graph["lookthrough_ready"] is False
+    assert graph.graph["weight_basis_warning"] is None
+    assert graph.graph["review_rows"] == []
+    assert graph.graph["review_warning"] is None
 
 
 def test_build_graph_rejects_mixed_weight_bases() -> None:
@@ -165,6 +175,10 @@ def test_build_graph_accepts_pydantic_holding_and_linked_etf() -> None:
 
     graph = build_graph([holding])
 
+    assert graph.graph["lookthrough_ready"] is True
+    assert graph.graph["weight_basis_warning"] is None
+    assert graph.graph["review_rows"] == []
+    assert graph.graph["review_warning"] is None
     assert graph["FUND:IRF"]["FUND:FGS"]["weight"] == pytest.approx(0.1059)
     assert graph.nodes["FUND:FGS"]["kind"] == "fund"
     assert graph.nodes["FUND:FGS"]["unresolved"] is True
@@ -188,3 +202,39 @@ def test_fund_period_end_uses_latest_date_and_unresolved_has_none() -> None:
 
     assert graph.nodes["FUND:FA"]["period_end"] == "2026-09-30"
     assert graph.nodes["FUND:FX"]["period_end"] is None
+
+
+def test_build_graph_accepts_database_holding_row() -> None:
+    holding = make_holding(weight_basis=WeightBasis.TOTAL)
+    row = HoldingRow(**holding.model_dump())
+
+    graph = build_graph([row])  # type: ignore[list-item]
+
+    assert graph.graph["lookthrough_ready"] is True
+    assert graph["FUND:FA"]["ISIN:TRAASELS91H2"]["weight"] == pytest.approx(0.1)
+
+
+def test_build_graph_marks_needs_review_rows_not_ready(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    holding = make_holding(weight_basis=WeightBasis.TOTAL, status=Status.NEEDS_REVIEW)
+
+    graph = build_graph([holding])
+
+    assert graph.graph["lookthrough_ready"] is False
+    assert graph.graph["review_rows"] == [("FA", 1)]
+    assert graph.graph["review_warning"] is not None
+    assert "needs_review" in caplog.text
+
+
+def test_build_graph_marks_unknown_weight_basis_not_ready(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    holding = make_holding(weight_basis=WeightBasis.UNKNOWN)
+
+    graph = build_graph([holding])
+
+    assert graph.graph["weight_basis"] == "unknown"
+    assert graph.graph["lookthrough_ready"] is False
+    assert graph.graph["weight_basis_warning"] is not None
+    assert "bilinmeyen" in caplog.text
