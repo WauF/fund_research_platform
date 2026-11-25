@@ -18,7 +18,7 @@ from extraction.llm import (
     extract_with_llm,
     validate_extraction,
 )
-from schemas.holding import Status
+from schemas.holding import Status, WeightBasis
 from tests.extraction.test_baseline import IRF_META, IRF_PAGES
 
 RUN_ID = uuid4()
@@ -177,3 +177,49 @@ def test_english_number_format():
     _, extraction, check = run(reply)
     assert extraction.errors == []
     assert check.ok
+
+
+@pytest.mark.parametrize("weight_text", ["", "-"])
+def test_missing_weight_is_derived_and_flagged(weight_text):
+    # Before: an empty weight became 0, and a 0-weight row is left out of the value sum, so a
+    # wrong value on that row passed. Now the row is kept, its weight comes from value / portfolio
+    # value, and the report goes to review.
+    reply = correct_reply()
+    row = next(r for r in reply["rows"] if r["held_fund_code"] == "TMV")
+    row["weight_text"] = weight_text
+    _, extraction, check = run(reply)
+    tmv = next(h for h in extraction.holdings if h.held_fund_code == "TMV")
+    assert tmv.weight == Decimal("0.0008")
+    assert len(extraction.holdings) == 23
+    assert [i.code for i in check.issues] == ["extraction_error"]
+    assert all(h.status is Status.NEEDS_REVIEW for h in check.holdings)
+
+
+def test_missing_weight_without_summary_is_not_guessed():
+    reply = correct_reply()
+    reply["summary"] = None
+    reply["rows"][0]["weight_text"] = ""
+    _, extraction, _ = run(reply)
+    assert len(extraction.holdings) == 22
+    assert any("no summary" in e for e in extraction.errors)
+
+
+def test_missing_weight_derived_on_the_rows_basis():
+    # Review on #19: a total-basis report must not get one portfolio-basis row.
+    reply = correct_reply()
+    for r in reply["rows"]:
+        r["weight_basis"] = "total"
+    tmv = next(r for r in reply["rows"] if r["held_fund_code"] == "TMV")
+    tmv["weight_text"] = ""
+    _, extraction, _ = run(reply)
+    assert {h.weight_basis for h in extraction.holdings} == {WeightBasis.TOTAL}
+    row = next(h for h in extraction.holdings if h.held_fund_code == "TMV")
+    assert row.weight == Decimal("0.0007")  # 261.168,05 / 378.395.976,36 (total value)
+
+
+def test_missing_weight_with_unknown_basis_is_not_converted():
+    reply = correct_reply()
+    reply["rows"][0].update(weight_text="", weight_basis="unknown")
+    _, extraction, _ = run(reply)
+    assert len(extraction.holdings) == 22
+    assert any("unknown basis" in e for e in extraction.errors)

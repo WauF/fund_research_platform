@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 from pydantic import ValidationError
 
 from extraction import isin as isin_mod
+from extraction.fund_codes import ETF_TICKERS
 from extraction.numbers import parse_number
 from extraction.pdf_text import repair_encoding
 from schemas.holding import (
@@ -80,8 +81,6 @@ MONTHS = {
     "ocak": 1, "şubat": 2, "mart": 3, "nisan": 4, "mayıs": 5, "haziran": 6,
     "temmuz": 7, "ağustos": 8, "eylül": 9, "ekim": 10, "kasım": 11, "aralık": 12,
 }  # fmt: skip
-# Exchange tickers of ETFs whose KAP fund code differs (decision 0003). Source: KAP search.
-ETF_TICKERS = {"GMSTR": "FGS"}
 CURRENCIES = {"TL": "TRY", "TRY": "TRY", "USD": "USD", "EUR": "EUR", "GBP": "GBP", "CHF": "CHF"}
 
 _NUM = re.compile(r"^-?\d{1,3}(?:\.\d{3})*,\d+$")
