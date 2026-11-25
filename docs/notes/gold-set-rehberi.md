@@ -49,7 +49,11 @@ row_no,page,quote,name,asset_type,isin,instrument_code,held_fund_code,currency,v
    farklı olabilir (GMSTR → FGS), KAP'ta kontrol edin. Yabancı ETF'lerde boş.
 7. **Döviz satırları** ağırlığı 0 olsa da tabloda basılıysa yazılır (değer "hazır değerler"de).
 8. **quote** satırın PDF'teki ilk basılı satırıdır; `page` o satırın sayfası.
-9. Emin olmadığınız satırı atlamayın: yazın ve `notes` sütununa (isteğe bağlı) not düşün.
+9. **ISIN'siz satırlar** (mevduat, nakit, teminat, repo): `name` yalnızca kurum / araç adıdır,
+   tutar veya oran içermez (`VIOP Nakit Teminatı`, `TEB A.Ş.`). Değerlendirme bu satırları değer,
+   para birimi ve ad ile eşleştirir; ad, tahmindeki adın içinde tam kelimeler olarak geçmelidir.
+   `instrument_code`'u yalnızca raporda gerçekten bir kod basılıysa yazın (banka adı kod değildir).
+10. Emin olmadığınız satırı atlamayın: yazın ve `notes` sütununa (isteğe bağlı) not düşün.
 
 ## Kontrol
 - Etiketleyen dosyayı bitirince satırların değer toplamını özet tablodaki portföy değeriyle
