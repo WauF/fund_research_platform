@@ -7,6 +7,7 @@ a real model (pytest-socket blocks it).
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import urllib.request
@@ -44,3 +45,39 @@ class OpenAICompatibleClient:
         with urllib.request.urlopen(request, timeout=self.timeout) as response:
             reply = json.load(response)
         return reply["choices"][0]["message"]["content"]
+
+
+def request_hashes(system: str, user: str, schema: dict) -> dict[str, str]:
+    """sha256 of each part of a request, to tie a recorded reply to the exact input it answered."""
+
+    def sha(text: str) -> str:
+        return hashlib.sha256(text.encode()).hexdigest()
+
+    return {
+        "system": sha(system),
+        "user": sha(user),
+        "schema": sha(json.dumps(schema, sort_keys=True)),
+    }
+
+
+class StaleRecording(ValueError):
+    """The request differs from the one the recorded reply answered: record it again."""
+
+
+class RecordedClient:
+    """Replays a recorded reply (tests/recorded/*.json) instead of calling a model.
+
+    The reply is returned only for the exact request it was recorded for. If the prompt, the schema
+    or the document text changed, the old answer is not reused silently: StaleRecording is raised.
+    """
+
+    def __init__(self, recording: dict) -> None:
+        self.recording = recording
+        self.model = recording["model"]
+
+    def complete_json(self, system: str, user: str, schema: dict) -> str:
+        got = request_hashes(system, user, schema)
+        changed = [k for k, v in self.recording["request_sha256"].items() if got[k] != v]
+        if changed:
+            raise StaleRecording(f"request changed since recording ({', '.join(changed)})")
+        return self.recording["reply"]
