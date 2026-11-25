@@ -1,7 +1,7 @@
 # CI proposal for Ahmet: Postgres tests + extraction smoke test
 
 Hey Ahmet, `.github/` and the test setup are yours, so this is a draft for you to apply (or change) under your name, not a PR from me.
-Patch: `docs/proposals/ci-postgres-e2e/ci-postgres-e2e.patch` (2 files, +79 −3). Apply from the repo root, then delete this folder in the same commit:
+Patch: `docs/proposals/ci-postgres-e2e/ci-postgres-e2e.patch` (3 files, +81 −5). Apply from the repo root, then delete this folder in the same commit:
 
 ```bash
 git apply docs/proposals/ci-postgres-e2e/ci-postgres-e2e.patch
@@ -19,6 +19,7 @@ The three bugs you found in #18/#19 were all at boundaries our CI never crossed:
    - `scripts.ingest_corpus IRF` runs the real IRF PDF through SeaweedFS → `documents` → baseline → validation → `holdings`.
    - It then checks `GET /documents/{id}/holdings`: 23 rows, run `ok`, all `weight_basis = total`, BGP at FTD `0.1059`.
    - A second run must print `skipped`, which checks that reprocessing creates no duplicates.
+4. **Cache glob fix (from Yusuf's review on #21):** `setup-uv` resolves `cache-dependency-glob` relative to its `working-directory`, so `backend/uv.lock` becomes `backend/backend/uv.lock`. main's CI log already warns "No file matched … The cache will never get invalidated". The patch changes it to `uv.lock` in the existing `backend` job, in `evaluation.yml`, and in the two new `setup-uv` steps.
 
 ## How I checked it (locally, OrbStack)
 - **Postgres suite:** the full suite with `TEST_DATABASE_URL` pointing at `postgres:18.6-alpine` gives 318 passed, 1 skipped (the IRF fixture test). The tables were really created in Postgres.

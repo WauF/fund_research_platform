@@ -1,5 +1,5 @@
 diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
-index 5a9e65e..64c7b70 100644
+index 5a9e65e..1bcc7c4 100644
 --- a/.github/workflows/ci.yml
 +++ b/.github/workflows/ci.yml
 @@ -1,6 +1,6 @@
@@ -11,10 +11,19 @@ index 5a9e65e..64c7b70 100644
  #
  # CI never calls a real LLM or market-data API: no secrets are passed to any job, pytest-socket
  # blocks internet access in tests (backend/pyproject.toml), and tests use backend/tests/recorded/
+@@ -40,7 +40,7 @@ jobs:
+         with:
+           working-directory: backend
+           enable-cache: true
+-          cache-dependency-glob: backend/uv.lock
++          cache-dependency-glob: uv.lock  # relative to working-directory
+ 
+       # --locked fails if pyproject.toml and uv.lock disagree (someone forgot `uv lock`).
+       - name: Install dependencies
 @@ -55,6 +55,46 @@ jobs:
        - name: Pytest
          run: uv run pytest
-
+ 
 +  # The same tests on Postgres instead of SQLite (tests/conftest.py reads TEST_DATABASE_URL).
 +  # SQLite hides Postgres-only behaviour: NUMERIC scale, enum types, constraint and type errors.
 +  backend-postgres:
@@ -47,7 +56,7 @@ index 5a9e65e..64c7b70 100644
 +        with:
 +          working-directory: backend
 +          enable-cache: true
-+          cache-dependency-glob: backend/uv.lock
++          cache-dependency-glob: uv.lock  # relative to working-directory
 +
 +      - name: Install dependencies
 +        run: uv sync --locked
@@ -61,7 +70,7 @@ index 5a9e65e..64c7b70 100644
 @@ -126,6 +166,30 @@ jobs:
                "select count(*) from documents where sha256 = '"'"'$SHA'"'"'"')
            [ "$rows" = 1 ]
-
+ 
 +      # A real KAP report through the whole path on the running stack: PDF -> SeaweedFS ->
 +      # documents -> baseline extraction -> validation -> holdings (FTD) -> API. Run twice: the
 +      # second run must not add anything (reprocessing creates 0 duplicate holdings).
@@ -69,7 +78,7 @@ index 5a9e65e..64c7b70 100644
 +        with:
 +          working-directory: backend
 +          enable-cache: true
-+          cache-dependency-glob: backend/uv.lock
++          cache-dependency-glob: uv.lock  # relative to working-directory
 +
 +      - name: Extraction smoke test
 +        working-directory: backend
@@ -89,25 +98,38 @@ index 5a9e65e..64c7b70 100644
        # Every downgrade() must work on real Postgres too (SQLite misses e.g. leftover enum types).
        # Rules: .claude/skills/db-migrations/SKILL.md
        - name: Migration round trip
+diff --git a/.github/workflows/evaluation.yml b/.github/workflows/evaluation.yml
+index e42ba21..fbdd5bc 100644
+--- a/.github/workflows/evaluation.yml
++++ b/.github/workflows/evaluation.yml
+@@ -45,7 +45,7 @@ jobs:
+         with:
+           working-directory: backend
+           enable-cache: true
+-          cache-dependency-glob: backend/uv.lock
++          cache-dependency-glob: uv.lock  # relative to working-directory
+ 
+       - name: Install dependencies
+         run: uv sync --locked
 diff --git a/backend/tests/conftest.py b/backend/tests/conftest.py
 index 6c24e1b..9a75c5f 100644
 --- a/backend/tests/conftest.py
 +++ b/backend/tests/conftest.py
 @@ -1,8 +1,11 @@
  """Shared fixtures: the API against SQLite in memory and moto's in-process S3 mock (no sockets).
-
+ 
 -The real stack (Postgres + SeaweedFS) is covered by the CI docker smoke test.
 +With TEST_DATABASE_URL set (CI job backend-postgres), every test that uses the database runs on
 +that Postgres instead, so Postgres-only behaviour (NUMERIC scale, enum types, constraints) is
 +tested too. The whole stack (Postgres + SeaweedFS + API) is covered by the CI docker job.
  """
-
+ 
 +import os
  from collections.abc import Iterator
-
+ 
  import boto3
 @@ -23,6 +26,15 @@ BUCKET = "documents"
-
+ 
  @pytest.fixture
  def session_factory() -> Iterator[sessionmaker[Session]]:
 +    if url := os.environ.get("TEST_DATABASE_URL"):
