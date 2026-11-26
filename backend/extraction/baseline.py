@@ -291,6 +291,80 @@ def _find_isin(row: _Row) -> str | None:
     return None
 
 
+_DATE_TOKEN = re.compile(r"^\d{2}/\d{2}/\d{2,4}$")
+_ISO_CURRENCY = re.compile(r"^[A-Z]{3}$")
+_TICKER_LINE = re.compile(r"^([A-Z0-9_.]{2,})\s+TL\b")  # 'AKBNK TL A': ticker pushed to a new line
+
+
+def _currency_at(tokens: list[str], asset_type: AssetType) -> tuple[int | None, str]:
+    """Index of the currency token and its ISO code ('TRY' and None if there is none).
+
+    Currency rows print the code twice ('CAD CAD CAD 142,20 ...', 'EUR EUR AVRUPA ...'); that
+    form is read as a currency even when the code is not in CURRENCIES, so CAD stays CAD.
+    """
+    if (
+        asset_type is AssetType.CASH
+        and len(tokens) >= 2
+        and tokens[0] == tokens[1]
+        and _ISO_CURRENCY.match(tokens[0])
+    ):
+        return 0, CURRENCIES.get(tokens[0], tokens[0])
+    at = next((i for i, t in enumerate(tokens) if t in CURRENCIES), None)
+    return at, CURRENCIES[tokens[at]] if at is not None else "TRY"
+
+
+def _leading_words(tokens: list[str]) -> str:
+    """Words before the first number, date or ISIN: 'TPP 01/10/26 0 38,90 ...' -> 'TPP'."""
+    words: list[str] = []
+    for t in tokens:
+        if _NUM.match(t) or _DATE_TOKEN.match(t) or t.isdigit() or _ISIN_TOKEN.match(t):
+            break
+        words.append(t)
+    return " ".join(words)
+
+
+def _row_name(
+    row: _Row, tokens: list[str], cur_at: int | None, currency: str, isin: str | None,
+    names_by_isin: dict[str, str],
+) -> str:  # fmt: skip
+    """The instrument's name without amounts, rates or dates (decision: gold-set-rehberi rule 9).
+
+    Most rows print '<name> TL <issuer> ...', and the name is what comes before the currency.
+    The rest, in the order tried:
+    - currency rows ('USD USD ABD 123.210,72 ...'): the currency code;
+    - no currency token ('VIOP Nakit Teminatı 11.927.534,70 ...', 'TPP 01/10/26 0 38,90 ...'):
+      the words before the first number or date;
+    - a fragment left by the PDF layout ('K TRAAKBNK91N6 ...', '30.000,00 ...'): the ticker from
+      a continuation line ('AKBNK TL A'), else the name of an earlier row with the same ISIN
+      (a second lot of the same share).
+    The printed line is kept as a last resort, so no row is lost.
+    """
+    if cur_at == 0:
+        # Only currency rows start with their currency; anything else keeps the printed line.
+        return currency if row.asset_type is AssetType.CASH else row.line
+    if cur_at is not None:
+        return " ".join(tokens[:cur_at])
+    words = _leading_words(tokens)
+    if len(words) >= 2:  # 'TPP', 'VIOP Nakit Teminatı'; 'K' or '' is a layout fragment
+        return words
+    for line in row.extra:
+        if m := _TICKER_LINE.match(line):
+            return m.group(1)
+    if isin and isin in names_by_isin:
+        return names_by_isin[isin]
+    return words or row.line
+
+
+def _instrument_code(name: str, asset_type: AssetType) -> str | None:
+    """First word of the name ('NETGL', 'F_XAUUSD1026', 'TPP'); none for cash and deposits.
+
+    A bank or a currency is not an instrument code ('TEB A.Ş.' -> no 'TEB'; gold rule 9).
+    """
+    if asset_type in {AssetType.CASH, AssetType.DEPOSIT}:
+        return None
+    return re.split(r"[\s-]", name, maxsplit=1)[0] or None
+
+
 def _held_fund_code(prefix: str, asset_type: AssetType) -> str | None:
     """KAP fund code of a fund or ETF row: 'BGP-AK PORTFÖY', 'IOO - İŞ', 'KVS', '(CKL) YAPI'."""
     if asset_type not in FUND_LIKE or not prefix:
@@ -323,15 +397,15 @@ def parse_report(
 
     holdings: list[Holding] = []
     printed_total: dict[int, Decimal | None] = {}
+    names_by_isin: dict[str, str] = {}
     for row_no, row in enumerate(rows, 1):
-        prefix = row.line
         tokens = row.line.split()
-        cur_at = next((i for i, t in enumerate(tokens) if t in CURRENCIES), None)
-        if cur_at is not None:
-            prefix = " ".join(tokens[:cur_at])
-        currency = CURRENCIES[tokens[cur_at]] if cur_at is not None else "TRY"
+        cur_at, currency = _currency_at(tokens, row.asset_type)
         isin = _find_isin(row)
-        held_fund_code = _held_fund_code(prefix, row.asset_type)
+        name = _row_name(row, tokens, cur_at, currency, isin, names_by_isin)
+        if isin and name != row.line:  # a later lot must not inherit a fallback name
+            names_by_isin.setdefault(isin, name)
+        held_fund_code = _held_fund_code(name, row.asset_type)
         try:
             value, weight, total_weight = _read_numbers(row, portfolio_value)
             holdings.append(
@@ -344,10 +418,10 @@ def parse_report(
                     quote=row.line,
                     extraction_run_id=run_id,
                     row_no=row_no,
-                    name=prefix or row.line,
+                    name=name,
                     asset_type=row.asset_type,
                     isin=isin,
-                    instrument_code=re.split(r"[\s-]", prefix, maxsplit=1)[0] or None,
+                    instrument_code=_instrument_code(name, row.asset_type),
                     held_fund_code=held_fund_code,
                     value=value,
                     currency=currency,

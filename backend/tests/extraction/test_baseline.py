@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from exposure.graph import build_graph
 from extraction.baseline import (
     ReportMeta,
     UnsupportedTemplate,
@@ -188,6 +189,69 @@ def test_short_position_and_fund_code_variants():
         "GMSTR",
         "FGS",
     )
+
+
+# Real lines from the September corpus (ECA, DLY, PIS, AP7, IDY), with the continuation lines that
+# matter. Rows without a currency token used to take the whole printed line as their name.
+NAME_ROWS = (
+    "HİSSE SENETLERİ\n"
+    # ECA: pdfplumber writes AKBNK's name one letter per line; the ticker lands on the next line.
+    "K TRAAKBNK91N6 205.000,01 69,420791 23/09/26 80100511 67,000000 13.735.000,54 4,94 4,44 4,58\n"
+    "AKBNK TL A\nT\nK\n"
+    "K TRAAKBNK91N6 5.000,00 69,364344 30/09/26 80100511 67,000000 335.000,00 0,12 0,11 0,11\n"
+    "EUPWR TL EUROPOW 120.000,00 58,113701 30/09/26 80100517 50,100000 6.012.000,00"
+    " 2,16 1,94 2,00\n"
+    "TEKNOLOJİ TREEUPW00019\n"
+    # A second EUPWR lot: no name at all, only its ISIN on a continuation line.
+    "30.000,00 56,712502 30/09/26 80100517 50,100000 1.503.000,00 0,54 0,49 0,50\n"
+    "TEKNOLOJİ TREEUPW00019\n"
+    "TPP\n"
+    "TPP 01/10/26 0 38,90 500.532.876,71 38,900000 30/09/26 275964 500.532.876,71 38,900000"
+    " 500.532.876,71 62,50 0,86 0,86\n"
+    "TPP 01/10/26 0 39,00 300.320.547,95 39,000000 30/09/26 275990 300.320.547,95 39,000000"
+    " 300.320.547,95 37,50 0,52 0,52\n"
+    "BPP 14/09/26 0 45,00 3.211.835,62 45,000000 11/09/26 146626 3.211.835,62 45,000000"
+    " 3.211.835,62 0,65 0,25 0,25\n"
+    "VIOP Nakit Teminatı\n"
+    "VIOP Nakit Teminatı 65.404.388,00 65.404.388,00 100,00 35,87\n"
+    "Döviz\n"
+    "USD USD ABD 123.210,72 48,731190 30/09/26 48,930300 6.028.737,49 0,00 0,00 2,01\n"
+    "CAD CAD CAD 142,20 27,375246 30/09/26 34,453200 4.899,25 0,00 0,00 0,00\n"
+)
+
+
+@pytest.fixture(scope="module")
+def named():
+    page = IRF_PAGES[0].split("HİSSE SENETLERİ")[0] + NAME_ROWS + "IV-FON TOPLAM DEĞERİ TABLOSU\n"
+    return parse_report([page], IRF_META).holdings
+
+
+def test_names_have_no_amounts_or_dates(named):
+    assert [h.name for h in named] == [
+        "AKBNK", "AKBNK", "EUPWR", "EUPWR", "TPP", "TPP", "BPP",
+        "VIOP Nakit Teminatı", "USD", "CAD",
+    ]  # fmt: skip
+    assert [h.isin for h in named[:4]] == ["TRAAKBNK91N6"] * 2 + ["TREEUPW00019"] * 2
+
+
+def test_instrument_code_only_where_one_is_printed(named):
+    # A bank or a currency is not an instrument code (gold rule 9); tickers and market codes are.
+    assert [h.instrument_code for h in named] == [
+        "AKBNK", "AKBNK", "EUPWR", "EUPWR", "TPP", "TPP", "BPP", None, None, None,
+    ]  # fmt: skip
+
+
+def test_currency_rows_keep_their_currency(named):
+    # CAD is not in CURRENCIES; it used to become TRY and merge into the CASH:TRY node.
+    assert [h.currency for h in named[-2:]] == ["USD", "CAD"]
+
+
+def test_money_market_lots_are_one_graph_leaf(named):
+    graph = build_graph(named)
+    leaves = {key for _, key in graph.out_edges("FUND:IRF")}
+    assert {"NAME:TPP", "NAME:BPP", "CASH:TRY", "CASH:USD", "CASH:CAD"} <= leaves
+    assert graph["FUND:IRF"]["NAME:TPP"]["weight"] == pytest.approx(0.0138)  # 0,86 + 0,52
+    assert not any(any(c.isdigit() for c in k) for k in leaves if k.startswith("NAME:"))
 
 
 # FTD weight (share of IRF's total value) of each sub-fund, as printed.
