@@ -7,7 +7,7 @@ import pytest
 
 from exposure.graph import build_graph
 from exposure.lookthrough import look_through
-from schemas.holding import AssetType, Holding, ReportKind, WeightBasis
+from schemas.holding import AssetType, Holding, ReportKind, Status, WeightBasis
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -58,6 +58,25 @@ def test_slide8_exposures_paths_coverage_and_total() -> None:
     assert result.cut_off == {}
     assert result.coverage == pytest.approx(0.972)
     assert result.total == pytest.approx(1.0)
+    assert result.weight_basis == WeightBasis.PORTFOLIO.value
+    assert result.lookthrough_ready is False
+    assert result.review_rows == []
+    assert len(result.warnings) == 1
+
+
+def test_result_carries_review_rows_and_warnings() -> None:
+    fixture = load_fixture("slide8.json")
+    holding = Holding.model_validate(fixture["holdings"][0]).model_copy(
+        update={"status": Status.NEEDS_REVIEW, "weight_basis": WeightBasis.TOTAL}
+    )
+
+    result = look_through(build_graph([holding]), "FUND:FA")
+
+    assert result.weight_basis == WeightBasis.TOTAL.value
+    assert result.lookthrough_ready is False
+    assert result.review_rows == [("FA", "2026-09-30", 1)]
+    assert len(result.warnings) == 1
+    assert "needs_review" in result.warnings[0]
 
 
 @pytest.mark.parametrize("fixture_name", ["unresolved.json", "deep.json"])

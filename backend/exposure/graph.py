@@ -1,14 +1,22 @@
 """Holding kayıtlarından ağırlık bazı ve para birimi güvenli fon-varlık grafı kurar."""
 
 import logging
-from collections.abc import Mapping
-from typing import Any
+from collections.abc import Mapping, Sequence
+from typing import Any, Protocol
 
 import networkx as nx
 
 from schemas.holding import FUND_LIKE, AssetType, Holding, Status, WeightBasis
 
-type HoldingInput = Holding | Mapping[str, Any]
+
+class HoldingAttributes(Protocol):
+    """Pydantic'in ``from_attributes`` ile okuyabildiği ORM benzeri holding girdisi."""
+
+    fund_code: str
+
+
+type HoldingInput = Holding | Mapping[str, Any] | HoldingAttributes
+type ReviewRow = tuple[str, str, int]
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,12 +44,12 @@ def node_key(value: HoldingInput) -> str:
     return f"NAME:{name}"
 
 
-def build_graph(holdings: list[Holding]) -> nx.DiGraph:
+def build_graph(holdings: Sequence[HoldingInput]) -> nx.DiGraph:
     """Holding satırlarını doğrula ve kaynak fonlardan hedeflere ağırlıklı graf kur."""
     # Bütün girdileri graf mutasyonundan önce doğrula.
     validated = [_validated(value) for value in holdings]
     review_rows = [
-        (holding.fund_code, holding.row_no)
+        (holding.fund_code, holding.period_end.isoformat(), holding.row_no)
         for holding in validated
         if holding.status is not Status.OK
     ]

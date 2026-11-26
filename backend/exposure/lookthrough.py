@@ -9,6 +9,7 @@ from datetime import date
 import networkx as nx
 
 from exposure.cycles import find_cycles
+from exposure.graph import ReviewRow
 
 PathContribution = tuple[list[str], float]
 CYCLIC_PATH_FLOOR = 1e-12
@@ -30,6 +31,10 @@ class LookThroughResult:
     max_date_gap_days: int | None
     cycles: list[list[str]]
     total: float
+    weight_basis: str | None
+    lookthrough_ready: bool
+    review_rows: list[ReviewRow]
+    warnings: list[str]
 
 
 def _report_dates(
@@ -133,6 +138,11 @@ def look_through(
         abs(weight) for weight in cut_off.values()
     )
     coverage = 1.0 - unavailable_total / gross_total if gross_total else 0.0
+    warnings = [
+        warning
+        for key in ("weight_basis_warning", "review_warning")
+        if (warning := graph.graph.get(key))
+    ]
     return LookThroughResult(
         root=root,
         exposures=ordered_exposures,
@@ -145,4 +155,8 @@ def look_through(
         max_date_gap_days=max_date_gap_days,
         cycles=cycles,
         total=total,
+        weight_basis=graph.graph.get("weight_basis"),
+        lookthrough_ready=bool(graph.graph.get("lookthrough_ready", False)),
+        review_rows=list(graph.graph.get("review_rows", [])),
+        warnings=warnings,
     )

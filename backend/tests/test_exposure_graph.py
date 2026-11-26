@@ -150,7 +150,7 @@ def test_build_graph_rejects_mixed_weight_bases() -> None:
 
 def test_build_graph_validates_dictionary_input() -> None:
     row = make_holding().model_dump(mode="json")
-    graph = build_graph([row])  # type: ignore[list-item]
+    graph = build_graph([row])
     assert graph["FUND:FA"]["ISIN:TRAASELS91H2"]["weight"] == pytest.approx(0.1)
 
 
@@ -208,7 +208,7 @@ def test_build_graph_accepts_database_holding_row() -> None:
     holding = make_holding(weight_basis=WeightBasis.TOTAL)
     row = HoldingRow(**holding.model_dump())
 
-    graph = build_graph([row])  # type: ignore[list-item]
+    graph = build_graph([row])
 
     assert graph.graph["lookthrough_ready"] is True
     assert graph["FUND:FA"]["ISIN:TRAASELS91H2"]["weight"] == pytest.approx(0.1)
@@ -222,9 +222,33 @@ def test_build_graph_marks_needs_review_rows_not_ready(
     graph = build_graph([holding])
 
     assert graph.graph["lookthrough_ready"] is False
-    assert graph.graph["review_rows"] == [("FA", 1)]
+    assert graph.graph["review_rows"] == [("FA", "2026-09-30", 1)]
     assert graph.graph["review_warning"] is not None
     assert "needs_review" in caplog.text
+
+
+def test_review_rows_include_period_to_distinguish_reports() -> None:
+    holdings = [
+        make_holding(
+            period_start=date(2026, 1, 1),
+            period_end=date(2026, 1, 31),
+            weight_basis=WeightBasis.TOTAL,
+            status=Status.NEEDS_REVIEW,
+        ),
+        make_holding(
+            period_start=date(2026, 9, 1),
+            period_end=date(2026, 9, 30),
+            weight_basis=WeightBasis.TOTAL,
+            status=Status.NEEDS_REVIEW,
+        ),
+    ]
+
+    graph = build_graph(holdings)
+
+    assert graph.graph["review_rows"] == [
+        ("FA", "2026-01-31", 1),
+        ("FA", "2026-09-30", 1),
+    ]
 
 
 def test_build_graph_marks_unknown_weight_basis_not_ready(

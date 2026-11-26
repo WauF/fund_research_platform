@@ -63,10 +63,14 @@ def test_records_from_the_database_validate_again(session, irf_run, read):
 
 def test_saved_records_build_a_graph(session, irf_run):
     # What package B reads: one weight basis per graph, total value (decision 0009).
-    holdings = [_raw(r, Holding) for r in list_holdings(session, irf_run.id)]
+    holdings = list_holdings(session, irf_run.id)
+    assert any(row.value.as_tuple().exponent != -2 for row in holdings)
     graph = build_graph(holdings)
     assert graph.graph["weight_basis"] == WeightBasis.TOTAL.value
+    assert graph.graph["lookthrough_ready"] is True
     result = look_through(graph, "FUND:IRF")
+    assert result.lookthrough_ready is True
+    assert result.review_rows == []
     assert len(result.unresolved) == 20  # IRF's sub-funds have no report in this graph
 
 
