@@ -1,9 +1,8 @@
 from datetime import date
 from decimal import Decimal
 
-import pytest
-
 from evaluations.pdf_fixture import normalize_holdings_to_total
+from extraction.weights import to_total_basis
 from schemas.holding import (
     AssetType,
     Holding,
@@ -46,7 +45,7 @@ def _summary() -> ReportSummary:
     )
 
 
-def test_uses_printed_ftd_weight_when_pdf_has_both_columns() -> None:
+def test_normalize_uses_shared_total_basis_conversion() -> None:
     holding = _holding(
         "BGP-AK PORTFÖY TL AK 5.884.985,00 6,796958 29/09/26 "
         "6,809489 40.073.740,62 12,93 12,02 10,59",
@@ -55,14 +54,17 @@ def test_uses_printed_ftd_weight_when_pdf_has_both_columns() -> None:
 
     normalized = normalize_holdings_to_total([holding], _summary())[0]
 
+    assert normalized == to_total_basis([holding], _summary())[0]
     assert normalized.weight == Decimal("0.1059")
     assert normalized.weight_basis is WeightBasis.TOTAL
 
 
-def test_falls_back_to_portfolio_share_without_printed_ftd_column() -> None:
-    holding = _holding("BGP TL 40.073.740,62 12,93 12,02", "0.1202")
+def test_normalize_keeps_total_basis_row_unchanged() -> None:
+    holding = _holding("BGP TL 40.073.740,62 10,59", "0.1059").model_copy(
+        update={"weight_basis": WeightBasis.TOTAL}
+    )
 
     normalized = normalize_holdings_to_total([holding], _summary())[0]
 
-    assert normalized.weight == pytest.approx(Decimal("0.1202") * _summary().portfolio_share())
+    assert normalized == holding
     assert normalized.weight_basis is WeightBasis.TOTAL
