@@ -181,9 +181,11 @@ taranmış) açıkça "desteklenmiyor" olarak reddediliyor. LLM çıkarımı bu 
    olur. Satır düzeyi toleranslar tek ay / tek şablondan ölçüldü (değer toplamı %0,02, satır ağırlığı
    0,05 puan); diğer şablonlarda yeniden ölçülmeli.
 5. **İsim, kimlik değil ama graf anahtarı olabiliyor (22.11).** ISIN'siz ve fon olmayan satırlarda
-   `exposure.graph.node_key` adı kullanıyor. Baseline para piyasası / döviz satırlarında satırın tamamını
-   ad yapıyor (`TPP 01/10/26 0 38,90 500.532.876,71 ...`), bu yüzden her satır ayrı yaprak oluyor.
-   Düzeltme Paket A'da (temiz ad).
+   `exposure.graph.node_key` adı kullanıyor. ~~Baseline para piyasası / döviz satırlarında satırın
+   tamamını ad yapıyor (`TPP 01/10/26 0 38,90 500.532.876,71 ...`), bu yüzden her satır ayrı yaprak
+   oluyor.~~ *(27.11: düzeltildi. Ad artık tutar, oran, tarih içermiyor: 201 satır temizlendi, korpusta
+   sayılı ad kalmadı; PKV'de 71 yaprak 9'a indi, toplam ağırlık aynı. Banka ve döviz `instrument_code`
+   olmaktan çıktı. Test: `test_money_market_rows_from_the_database_are_one_leaf`.)*
 6. **Elle çalıştırılan model "kör" değil; gold set'e dokunmamalı (24.11).** LLM sağlayıcısı seçilene kadar
    çıkarım modeli bir Claude oturumunda elle çalıştırılıyor (`scripts/llm_manual.py`,
    `tests/recorded/`). O oturum baseline çıktısını ve IRF referansını görmüştü: bu kayıtlar boru hattını
@@ -216,3 +218,12 @@ taranmış) açıkça "desteklenmiyor" olarak reddediliyor. LLM çıkarımı bu 
     Aynı turda: `setup-uv`'de `cache-dependency-glob`, `working-directory`'ye göre çözülür
     (`backend/uv.lock` → `backend/backend/uv.lock`, önbellek hiç yenilenmiyor). CI logundaki
     uyarılar da okunur.
+13. **Döviz satırlarında `value` TL, ama sözleşme "`currency` cinsinden" diyor (27.11, açık).** KAP'ın
+    değer sütunu her satırda TL: ECA `APP US EQUITY USD`: 500 adet × 299,89 USD × 48,93 =
+    7.336.875,85 TL, saklanan `value` bu, `currency` ise `USD`. Korpustaki 43 TRY dışı satırın hepsi
+    böyle. Ağırlıklar ve doğrulama toplamları TL'ye göre doğru; yanlış olan sözleşmedeki cümle
+    (`docs/veri-sozlesmesi.md`, "Para birimi her satırda") ve `Holding.value` açıklaması. Değeri USD'ye
+    çevirmek toplamları bozar ve kur her satırda basılı değil. Öneri: "`value` raporun değerleme para
+    birimindedir (TL); `currency` aracın para birimidir". Şema ve sözleşme ortak, üç kişinin onayı
+    gerekiyor. Aynı incelemede: `CAD` para birimi tablosunda yoktu, IDY'nin CAD nakdi `TRY` sayılıp
+    `CASH:TRY` düğümüne karışıyordu; düzeltildi.

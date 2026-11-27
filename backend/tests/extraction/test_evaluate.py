@@ -94,9 +94,10 @@ def test_draft_gold_is_marked_unverified(irf):
 
 @pytest.fixture(scope="module")
 def deposit(irf):
-    # TEB deposit, no ISIN. The baseline writes the bank as instrument_code ('TEB'); an LLM
-    # usually leaves it empty, and then only the name tells the instrument apart.
-    return irf[1].model_copy(update={"instrument_code": None})
+    # TEB deposit: no ISIN and no instrument code (a bank is not a code), so only the name tells
+    # the instrument apart.
+    assert (irf[1].isin, irf[1].instrument_code) == (None, None)
+    return irf[1]
 
 
 def test_row_without_isin_needs_the_right_name(deposit):
